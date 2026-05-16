@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #E30613;
+  --color-accent-hover: #C20510;
+}
+
+/* 
+  TecnoRilievi Modern UI - Design System
+  Modularized Stylesheet
+*/
+
+@import "./styles/variables.css";
+@import "./styles/base.css";
+@import "./styles/components.css";
+@import "./styles/animations.css";
+@import "./styles/vendor.css";

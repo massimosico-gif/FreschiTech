@@ -1,0 +1,61 @@
+@keyframes premiumIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); filter: blur(10px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.animate-premium-in {
+  animation: premiumIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes wave-flow {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  33% { transform: translateX(3px) translateY(-2px); }
+  66% { transform: translateX(-3px) translateY(2px); }
+}
+
+.animate-wave {
+  animation: wave-flow 2s infinite ease-in-out;
+}
+
+/* Floating Card Animation */
+@keyframes floating {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.floating-card {
+  animation: floating 4s ease-in-out infinite;
+}
+
+/* Drawer System */
+.details-drawer { 
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease-in-out; 
+  will-change: transform, opacity;
+}
+.details-drawer.is-open { 
+  transform: translateX(0); 
+  opacity: 1; 
+}
+
+@keyframes glow-line-flow {
+  0% { background-position: -100% 0; }
+  50% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.animate-glow-line {
+  background-size: 200% 100%;
+  background-image: linear-gradient(to right, transparent, var(--brand-primary), transparent);
+  animation: glow-line-flow 8s ease-in-out infinite;
+}

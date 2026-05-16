@@ -1,0 +1,21 @@
+:root {
+  --bg-color: #f8fafc;
+  --sidebar-bg: rgba(241, 245, 249, 0.7);
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent-color: #E30613;
+  --brand-blue: #3b82f6;
+  --border-color: rgba(226, 232, 240, 0.5);
+  --font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  /* FriulHub Design Tokens - Adapted for FreschiTech */
+  --brand-primary: #94a3b8;
+  --brand-secondary: #0f172a;
+  --brand-text-muted: #64748b;
+  --brand-bg-glass: rgba(255, 255, 255, 0.6);
+  
+  --fs-box-label: 0.65rem;
+  --fs-box-text: 14px;
+  --tracking-label: 0.1em;
+}

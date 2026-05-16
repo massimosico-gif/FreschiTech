@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+dist-ssr
+**/target
+**/dist
+
+# OS files
+.DS_Store
+
+# Tauri specific
+src-tauri/target
+src-tauri/binaries
+src-tauri/gen
+
+# Env files
+*.local
+.env
+.env.*
+
+# Editor files
+.vscode
+.idea
+*.swp
+*.swo

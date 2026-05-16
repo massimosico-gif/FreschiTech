@@ -1,0 +1,24 @@
+/* Custom Flatpickr Theme */
+.flatpickr-calendar {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid white !important;
+  border-radius: 2rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1) !important;
+  margin-top: 10px !important;
+}
+
+.flatpickr-day.selected {
+  background: #8bc53f !important;
+  border-color: #8bc53f !important;
+  border-radius: 12px !important;
+}
+
+.flatpickr-day.today {
+  border-color: #8bc53f !important;
+  color: #8bc53f !important;
+}
+
+.flatpickr-day:hover {
+  background: rgba(139, 197, 63, 0.1) !important;
+}
