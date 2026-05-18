@@ -354,13 +354,15 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
                 (SELECT COALESCE(SUM(quantity * unit_price), 0.0) FROM materials WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(base_cost + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(hours * hourly_cost + travel_cost), 0.0) FROM labor WHERE project_id = p.id) +
-                (SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE project_id = p.id)
+                (SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE project_id = p.id) +
+                COALESCE(p.distance * p.km_cost, 0.0)
             ) as costo_totale,
             (
                 (SELECT COALESCE(SUM(quantity * unit_price * (1.0 + markup)), 0.0) FROM materials WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM((base_cost * (1.0 + markup)) + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM((hours * hourly_cost + travel_cost) * (1.0 + markup)), 0.0) FROM labor WHERE project_id = p.id) +
-                (SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses WHERE project_id = p.id)
+                (SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses WHERE project_id = p.id) +
+                COALESCE(p.distance * p.km_cost, 0.0)
             ) as valore_lavori,
             p.distance,
             p.km_cost
