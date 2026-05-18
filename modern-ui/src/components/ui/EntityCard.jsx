@@ -10,6 +10,7 @@ const EntityCard = ({
   badge,
   badgeColor = 'bg-slate-50 text-slate-400',
   footerItems = [], 
+  stats = [],
   onClick, 
   onDelete,
   onEdit
@@ -65,16 +66,38 @@ const EntityCard = ({
           </div>
 
           {/* Content: Title & Subtitle */}
-          <div className="flex-1">
-            <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight group-hover:text-white transition-colors duration-500">
-              {title}
-            </h3>
-            <div className="flex items-center gap-2 mt-2 text-slate-400 group-hover:text-white/60 transition-colors duration-500">
-              {SubtitleIcon && <SubtitleIcon size={14} />}
-              <span className="text-[0.7rem] font-bold uppercase tracking-wider">
-                {subtitle || 'N/D'}
-              </span>
+          <div className="flex-1 space-y-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight group-hover:text-white transition-colors duration-500">
+                {title}
+              </h3>
+              <div className="flex items-center gap-2 mt-2 text-slate-400 group-hover:text-white/60 transition-colors duration-500">
+                {SubtitleIcon && <SubtitleIcon size={14} />}
+                <span className="text-[0.7rem] font-bold uppercase tracking-wider">
+                  {subtitle || 'N/D'}
+                </span>
+              </div>
             </div>
+
+            {/* Rich stats panel */}
+            {stats && stats.length > 0 && (
+              <div className="grid grid-cols-3 gap-4 pt-4 pb-2 border-t border-slate-50 group-hover:border-white/10 transition-colors duration-500">
+                {stats.map((stat, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <p className="text-[0.55rem] font-black uppercase tracking-[0.05em] text-slate-400 group-hover:text-white/60 transition-colors duration-500">
+                      {stat.label}
+                    </p>
+                    <p className={`text-xs font-extrabold transition-colors duration-500 ${
+                      stat.highlight 
+                        ? 'text-emerald-500 group-hover:text-white' 
+                        : 'text-slate-700 group-hover:text-white'
+                    }`}>
+                      {stat.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Footer: Stats & Action */}

@@ -59,6 +59,31 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
     })
   }
 
+  const handleAddNewEmployee = async (newEmployeeName) => {
+    const trimmed = newEmployeeName.trim()
+    if (!trimmed) return
+
+    try {
+      const newEmp = {
+        name: trimmed,
+        default_hourly_cost: 30.0
+      }
+      
+      await invoke('save_employee', { employee: newEmp })
+
+      const updatedEmployees = await invoke('get_employees')
+      setEmployees(updatedEmployees || [])
+
+      const created = updatedEmployees.find(e => e.name.toLowerCase() === trimmed.toLowerCase())
+      if (created) {
+        setSelectedEmployeeIds(prev => [...prev, created.id])
+      }
+    } catch (err) {
+      console.error("Errore nel salvataggio del nuovo operatore:", err)
+      alert("Impossibile salvare il nuovo operatore: " + err)
+    }
+  }
+
   const phaseOptions = [
     { id: 'Generale', label: 'Generale' },
     { id: 'Robotica', label: 'Robotica' },
@@ -111,6 +136,7 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
                 onChange={setSelectedEmployeeIds}
                 placeholder="Seleziona squadra..."
                 icon={Users}
+                onAddNew={handleAddNewEmployee}
               />
             </div>
             <div className="space-y-2">

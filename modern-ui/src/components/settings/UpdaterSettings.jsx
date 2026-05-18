@@ -20,14 +20,14 @@ const UpdaterSettings = () => {
         <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl"><RefreshCw size={24} /></div>
         <div>
           <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aggiornamenti Software</h3>
-          <p className="text-xs font-bold text-slate-400">Versione attuale: <span className="text-[#8bc53f]">{currentVersion || '...'}</span></p>
+          <p className="text-xs font-bold text-slate-400">Versione attuale: <span className="text-accent">{currentVersion || '...'}</span></p>
         </div>
       </div>
 
       <div className="flex flex-col items-center justify-center py-12 space-y-8 bg-slate-50/50 rounded-[2.5rem] border border-slate-100">
         <div className="relative">
           <div className={`w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl ${
-             updateStatus === 'available' ? 'bg-[#8bc53f] text-white animate-bounce' :
+             updateStatus === 'available' ? 'bg-accent text-white animate-bounce' :
              updateStatus === 'up-to-date' ? 'bg-emerald-100 text-emerald-600' :
              updateStatus === 'error' ? 'bg-red-100 text-red-600' :
              'bg-white text-slate-300'
@@ -65,7 +65,7 @@ const UpdaterSettings = () => {
           {updateStatus === 'downloading' && (
             <div className="w-full bg-white h-3 rounded-full overflow-hidden shadow-inner mb-4">
               <div 
-                className="h-full bg-[#8bc53f] transition-all duration-300"
+                className="h-full bg-accent transition-all duration-300"
                 style={{ width: `${downloadProgress}%` }}
               />
             </div>
@@ -74,7 +74,7 @@ const UpdaterSettings = () => {
           {updateStatus === 'available' ? (
             <button 
               onClick={installUpdate}
-              className="w-full h-14 bg-[#8bc53f] text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-[#7ab236] transition-all shadow-xl shadow-[#8bc53f]/20 flex items-center justify-center gap-3"
+              className="w-full h-14 bg-accent text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 flex items-center justify-center gap-3"
             >
               <Download size={18} />
               Scarica e Installa {newVersion}

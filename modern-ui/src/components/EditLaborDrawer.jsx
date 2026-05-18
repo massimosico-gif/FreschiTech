@@ -5,6 +5,8 @@ import DrawerShell from './ui/DrawerShell'
 import Select from './ui/Select'
 import MultiSelect from './ui/MultiSelect'
 import DatePicker from './ui/DatePicker'
+import PhaseSelector from './ui/PhaseSelector'
+import VehicleSelector from './ui/VehicleSelector'
 
 const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSave }) => {
   const [employees, setEmployees] = useState([])
@@ -63,6 +65,31 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
     })
   }
 
+  const handleAddNewEmployee = async (newEmployeeName) => {
+    const trimmed = newEmployeeName.trim()
+    if (!trimmed) return
+
+    try {
+      const newEmp = {
+        name: trimmed,
+        default_hourly_cost: 30.0
+      }
+      
+      await invoke('save_employee', { employee: newEmp })
+
+      const updatedEmployees = await invoke('get_employees')
+      setEmployees(updatedEmployees)
+
+      const created = updatedEmployees.find(e => e.name.toLowerCase() === trimmed.toLowerCase())
+      if (created) {
+        setSelectedEmployeeIds(prev => [...prev, created.id])
+      }
+    } catch (err) {
+      console.error("Errore nel salvataggio del nuovo operatore:", err)
+      alert("Impossibile salvare il nuovo operatore: " + err)
+    }
+  }
+
   const [phaseOptions, setPhaseOptions] = useState([{ id: 'Generale', label: 'Generale' }])
   const [vehicleOptions, setVehicleOptions] = useState([{ id: 'Nessuno', label: 'Nessun Mezzo' }])
 
@@ -79,6 +106,61 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
       }
     }).catch(console.error)
   }, [])
+
+  const handleAddNewVehicle = async (newVehicleName) => {
+    const trimmed = newVehicleName.trim()
+    if (!trimmed) return
+
+    try {
+      const currentSettings = await invoke('get_global_settings')
+      const vehicles = currentSettings.vehicles || []
+
+      if (!vehicles.includes(trimmed)) {
+        const updatedVehicles = [...vehicles, trimmed]
+        const newSettings = {
+          ...currentSettings,
+          vehicles: updatedVehicles
+        }
+
+        await invoke('save_global_settings', { settings: newSettings })
+        setVehicleOptions([
+          { id: 'Nessuno', label: 'Nessun Mezzo' },
+          ...updatedVehicles.map(v => ({ id: v, label: v }))
+        ])
+      }
+
+      handleChange('vehicle', trimmed)
+    } catch (err) {
+      console.error("Errore nel salvataggio del nuovo mezzo:", err)
+      alert("Impossibile salvare il nuovo mezzo: " + err)
+    }
+  }
+
+  const handleAddNewPhase = async (newPhaseName) => {
+    const trimmed = newPhaseName.trim()
+    if (!trimmed) return
+
+    try {
+      const currentSettings = await invoke('get_global_settings')
+      const phases = currentSettings.phases_labor || []
+
+      if (!phases.includes(trimmed)) {
+        const updatedPhases = [...phases, trimmed]
+        const newSettings = {
+          ...currentSettings,
+          phases_labor: updatedPhases
+        }
+
+        await invoke('save_global_settings', { settings: newSettings })
+        setPhaseOptions(updatedPhases.map(p => ({ id: p, label: p })))
+      }
+
+      handleChange('phase', trimmed)
+    } catch (err) {
+      console.error("Errore nel salvataggio della nuova fase:", err)
+      alert("Impossibile salvare la nuova fase: " + err)
+    }
+  }
 
   const ccOptions = [
     { id: null, label: 'Nessuno (Costo Generale)' },
@@ -143,6 +225,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
                 onChange={setSelectedEmployeeIds}
                 placeholder="Scegli persone..."
                 icon={Users}
+                onAddNew={handleAddNewEmployee}
               />
             )}
           </div>
@@ -159,11 +242,11 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
         <div className="grid grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Mezzo Utilizzato</label>
-            <Select 
-              options={vehicleOptions}
+            <VehicleSelector 
+              vehicles={vehicleOptions}
               value={formData.vehicle}
               onChange={(val) => handleChange('vehicle', val)}
-              icon={Truck}
+              onAddNew={handleAddNewVehicle}
             />
           </div>
           <div className="space-y-2">
@@ -217,11 +300,11 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
           </div>
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
-            <Select 
-              options={phaseOptions}
+            <PhaseSelector 
+              phases={phaseOptions}
               value={formData.phase}
               onChange={(val) => handleChange('phase', val)}
-              icon={Layers}
+              onAddNew={handleAddNewPhase}
             />
           </div>
         </div>

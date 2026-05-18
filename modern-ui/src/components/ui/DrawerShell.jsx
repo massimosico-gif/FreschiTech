@@ -11,13 +11,17 @@ const DrawerShell = ({ isOpen, onClose, title, subtitle, icon, children, footer,
     if (isOpen) {
       document.body.style.overflow = 'hidden'
       setIsRendered(true)
-      timer = setTimeout(() => setIsAnimating(true), 10)
+      // A delay of 50ms ensures that the browser has fully rendered the drawer
+      // in its off-screen position (translate-x-full) before launching the sliding transition.
+      timer = setTimeout(() => setIsAnimating(true), 50)
     } else {
       setIsAnimating(false)
+      // A delay of 750ms matches the 700ms sliding transition duration,
+      // ensuring that the drawer is fully out of sight before it is unmounted.
       timer = setTimeout(() => {
         setIsRendered(false)
         document.body.style.overflow = ''
-      }, 650)
+      }, 750)
     }
 
     return () => {

@@ -39,6 +39,9 @@ pub struct Project {
     pub end_date: Option<String>,
     pub budget: f64,
     pub client_name: Option<String>,
+    pub costo_totale: Option<f64>,
+    pub valore_lavori: Option<f64>,
+    pub utile_previsto: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -111,26 +114,138 @@ pub struct Employee {
 
 #[tauri::command]
 pub fn get_stats() -> serde_json::Value {
-    let conn = get_connection().ok();
-    let clients_count = if let Some(c) = &conn {
-        c.query_row("SELECT COUNT(*) FROM clients", [], |row| row.get::<_, i64>(0)).unwrap_or(0)
-    } else {
-        45
+    let conn = match get_connection() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Database error in get_stats: {}", e);
+            return serde_json::json!({
+                "total_revenue": 0.0,
+                "invoices_count": 0,
+                "clients_count": 0,
+                "total_pending": 0.0,
+                "chart_data": []
+            });
+        }
     };
 
+    // 1. Fatturato Totale (Somma dei budget delle commesse)
+    let total_revenue: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(budget), 0.0) FROM projects",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    // 2. Progetti Attivi (status = 'active')
+    let invoices_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projects WHERE status = 'active'",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0);
+
+    // 3. Clienti Lely
+    let clients_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM clients",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0);
+
+    // 4. Costi Totali Cumulati (materiali + manodopera + spese + centri di costo)
+    let total_materials: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(quantity * unit_price), 0.0) FROM materials",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_cost_centers: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(base_cost + shipping + install_fee), 0.0) FROM cost_centers",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_labor: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(hours * hourly_cost), 0.0) FROM labor",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_expenses: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM expenses",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_pending = total_materials + total_cost_centers + total_labor + total_expenses;
+
+    // 5. Monthly Chart Data (Costi per mese dell'anno corrente)
+    let mut chart_data = vec![
+        serde_json::json!({"name": "Gen", "total": 0.0}),
+        serde_json::json!({"name": "Feb", "total": 0.0}),
+        serde_json::json!({"name": "Mar", "total": 0.0}),
+        serde_json::json!({"name": "Apr", "total": 0.0}),
+        serde_json::json!({"name": "Mag", "total": 0.0}),
+        serde_json::json!({"name": "Giu", "total": 0.0}),
+        serde_json::json!({"name": "Lug", "total": 0.0}),
+        serde_json::json!({"name": "Ago", "total": 0.0}),
+        serde_json::json!({"name": "Set", "total": 0.0}),
+        serde_json::json!({"name": "Ott", "total": 0.0}),
+        serde_json::json!({"name": "Nov", "total": 0.0}),
+        serde_json::json!({"name": "Dic", "total": 0.0}),
+    ];
+
+    // Query per recuperare tutti i costi raggruppati per mese dell'anno corrente
+    let stmt = conn.prepare("
+        SELECT 
+            substr(date, 6, 2) as month,
+            SUM(amount) as cost
+        FROM (
+            SELECT date, quantity * unit_price as amount FROM materials
+            UNION ALL
+            SELECT p.start_date as date, base_cost + shipping + install_fee as amount FROM cost_centers cc JOIN projects p ON cc.project_id = p.id
+            UNION ALL
+            SELECT date, hours * hourly_cost as amount FROM labor
+            UNION ALL
+            SELECT date, amount FROM expenses
+        )
+        WHERE substr(date, 1, 4) = strftime('%Y', 'now') AND date IS NOT NULL AND date != ''
+        GROUP BY month
+    ").ok();
+
+    if let Some(mut s) = stmt {
+        if let Ok(mut rows) = s.query([]) {
+            while let Ok(Some(row)) = rows.next() {
+                if let (Ok(month_str), Ok(cost)) = (row.get::<_, String>(0), row.get::<_, f64>(1)) {
+                    if let Ok(month_idx) = month_str.parse::<usize>() {
+                        if month_idx >= 1 && month_idx <= 12 {
+                            chart_data[month_idx - 1] = serde_json::json!({
+                                "name": match month_idx {
+                                    1 => "Gen",
+                                    2 => "Feb",
+                                    3 => "Mar",
+                                    4 => "Apr",
+                                    5 => "Mag",
+                                    6 => "Giu",
+                                    7 => "Lug",
+                                    8 => "Ago",
+                                    9 => "Set",
+                                    10 => "Ott",
+                                    11 => "Nov",
+                                    _ => "Dic"
+                                },
+                                "total": cost
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     serde_json::json!({
-        "total_revenue": 19060.0,
-        "invoices_count": 12,
+        "total_revenue": total_revenue,
+        "invoices_count": invoices_count,
         "clients_count": clients_count,
-        "total_pending": 2500.0,
-        "chart_data": [
-            {"name": "Gen", "value": 4000},
-            {"name": "Feb", "value": 3000},
-            {"name": "Mar", "value": 2000},
-            {"name": "Apr", "value": 2780},
-            {"name": "Mag", "value": 1890},
-            {"name": "Giu", "value": 2390}
-        ]
+        "total_pending": total_pending,
+        "chart_data": chart_data
     })
 }
 
@@ -221,13 +336,32 @@ pub fn delete_client(id: i64) -> Result<(), String> {
 pub fn get_projects() -> Result<Vec<Project>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("
-        SELECT p.*, c.name as client_name 
+        SELECT 
+            p.id, p.client_id, p.name, p.description, p.status, p.start_date, p.end_date, p.budget,
+            c.name as client_name,
+            (
+                (SELECT COALESCE(SUM(quantity * unit_price), 0.0) FROM materials WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(base_cost + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(hours * hourly_cost), 0.0) FROM labor WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE project_id = p.id)
+            ) as costo_totale,
+            (
+                (SELECT COALESCE(SUM(quantity * unit_price * (1.0 + markup)), 0.0) FROM materials WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM((base_cost * (1.0 + markup)) + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(hours * hourly_cost * (1.0 + markup)), 0.0) FROM labor WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses WHERE project_id = p.id)
+            ) as valore_lavori
         FROM projects p 
         LEFT JOIN clients c ON p.client_id = c.id 
         ORDER BY p.id DESC
     ").map_err(|e| e.to_string())?;
     
     let project_iter = stmt.query_map([], |row| {
+        let budget: f64 = row.get(7)?;
+        let costo_totale: f64 = row.get(9)?;
+        let valore_lavori: f64 = row.get(10)?;
+        let utile_previsto = valore_lavori - costo_totale;
+        
         Ok(Project {
             id: Some(row.get(0)?),
             client_id: row.get(1)?,
@@ -236,8 +370,11 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             status: row.get(4)?,
             start_date: row.get(5)?,
             end_date: row.get(6)?,
-            budget: row.get(7)?,
+            budget,
             client_name: row.get(8)?,
+            costo_totale: Some(costo_totale),
+            valore_lavori: Some(valore_lavori),
+            utile_previsto: Some(utile_previsto),
         })
     }).map_err(|e| e.to_string())?;
 

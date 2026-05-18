@@ -107,7 +107,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     <DrawerShell
       isOpen={isOpen}
       onClose={onClose}
-      title={client ? 'Modifica Cliente' : 'Nuovo Cliente'}
+      title={client && client.id ? 'Modifica Cliente' : 'Nuovo Cliente'}
       subtitle={formData.name || 'Scheda Anagrafica'}
       icon={formData.type === 'company' ? <Building2 size={24} /> : <User size={24} />}
       footer={
@@ -122,9 +122,9 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           <button 
             type="button" 
             onClick={handleSaveInternal} 
-            disabled={!isDirty && client}
+            disabled={!isDirty && client && client.id}
             className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
-              (!client || isDirty) 
+              (!client || !client.id || isDirty) 
               ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
               : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
             }`}

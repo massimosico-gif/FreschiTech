@@ -5,12 +5,14 @@ import {
   Save, 
   MessageSquare,
   AlertCircle,
-  Activity
+  Activity,
+  Euro
 } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
 import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
 import Select from './ui/Select'
+import EditClientDrawer from './EditClientDrawer'
 
 const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   const [errors, setErrors] = useState({})
@@ -31,6 +33,32 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     { id: 'completed', label: 'Completata', color: 'bg-slate-400' },
     { id: 'on_hold', label: 'Sospesa', color: 'bg-amber-500' }
   ]
+
+  const [isAddClientOpen, setIsAddClientOpen] = useState(false)
+  const [pendingClientName, setPendingClientName] = useState('')
+
+  const handleAddNewClientClick = (searchName) => {
+    setPendingClientName(searchName)
+    setIsAddClientOpen(true)
+  }
+
+  const handleSaveNewClient = async (clientData) => {
+    try {
+      await invoke('save_client', { client: clientData })
+      const updatedClients = await invoke('get_clients')
+      setClients(updatedClients)
+      
+      const newClient = updatedClients.find(c => c.name.toLowerCase() === clientData.name.toLowerCase())
+      if (newClient) {
+        setFormData(prev => ({ ...prev, client_id: newClient.id.toString() }))
+        setErrors(prev => ({ ...prev, client_id: '' }))
+      }
+      setIsAddClientOpen(false)
+    } catch (err) {
+      console.error("Errore salvataggio cliente:", err)
+      alert("Impossibile salvare il cliente: " + err)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -82,7 +110,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     const dataToSave = {
       ...formData,
       client_id: parseInt(formData.client_id),
-      budget: 0 // Forziamo a 0 dato che lo abbiamo rimosso dalla UI
+      budget: parseFloat(formData.budget) || 0
     }
     
     onSave(dataToSave)
@@ -123,122 +151,146 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   }, [isOpen, job])
 
   return (
-    <DrawerShell
-      isOpen={isOpen}
-      onClose={onClose}
-      title={job ? 'Modifica Commessa' : 'Nuova Commessa'}
-      subtitle={formData.name || 'Dettagli Cantiere'}
-      icon={<Briefcase size={24} />}
-      footer={
-        <>
-          <button 
-            type="button" 
-            onClick={onClose} 
-            className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-          >
-            Annulla
-          </button>
-          <button 
-            type="button" 
-            onClick={handleSaveInternal} 
-            disabled={!isDirty && job}
-            className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
-              (!job || isDirty) 
-              ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
-              : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
-            }`}
-          >
-            <Save size={18} /> Salva Commessa
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-10">
-        {/* SEZIONE 1: CLIENTE E TITOLO */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-1.5 h-6 bg-accent rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Informazioni Principali</span>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
-            <ClientSelector 
-              clients={clients} 
-              value={formData.client_id} 
-              onChange={handleClientChange} 
-              error={errors.client_id}
-            />
-            {errors.client_id && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.client_id}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Nome Commessa / Cantiere *</label>
-            <div className="relative">
-               <Briefcase className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
-               <input 
-                name="name" 
-                value={formData.name} 
-                onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                className={`w-full bg-white/50 border rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.name ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`}
-                placeholder="Es: Installazione Robot Mungitura Stalla Rossi" 
-              />
+    <>
+      <DrawerShell
+        isOpen={isOpen}
+        onClose={onClose}
+        title={job ? 'Modifica Commessa' : 'Nuova Commessa'}
+        subtitle={formData.name || 'Dettagli Cantiere'}
+        icon={<Briefcase size={24} />}
+        footer={
+          <>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+            >
+              Annulla
+            </button>
+            <button 
+              type="button" 
+              onClick={handleSaveInternal} 
+              disabled={!isDirty && job}
+              className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
+                (!job || isDirty) 
+                ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
+                : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
+              }`}
+            >
+              <Save size={18} /> Salva Commessa
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-10">
+          {/* SEZIONE 1: CLIENTE E TITOLO */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-accent rounded-full"></div>
+              <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Informazioni Principali</span>
             </div>
-            {errors.name && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
-          </div>
-        </section>
-
-        {/* SEZIONE 2: DATE E STATUS */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-1.5 h-6 bg-sky-400 rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Pianificazione</span>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inizio</label>
-              <DatePicker 
-                value={formData.start_date} 
-                onChange={handleDateChange} 
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
+              <ClientSelector 
+                clients={clients} 
+                value={formData.client_id} 
+                onChange={handleClientChange} 
+                error={errors.client_id}
+                onAddNew={handleAddNewClientClick}
               />
+              {errors.client_id && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.client_id}</p>}
             </div>
+  
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato</label>
-              <Select 
-                options={statusOptions}
-                value={formData.status}
-                onChange={handleStatusChange}
-                placeholder="Seleziona stato..."
-                icon={Activity}
-              />
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Nome Commessa / Cantiere *</label>
+              <div className="relative">
+                 <Briefcase className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
+                 <input 
+                  name="name" 
+                  value={formData.name} 
+                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className={`w-full bg-white/50 border rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.name ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`}
+                  placeholder="Es: Installazione Robot Mungitura Stalla Rossi" 
+                />
+              </div>
+              {errors.name && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
             </div>
-          </div>
-        </section>
 
-        {/* SEZIONE 3: NOTE */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-1.5 h-6 bg-slate-400 rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Note</span>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Libere</label>
-            <div className="relative">
-              <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
-              <textarea 
-                name="description"
-                value={formData.description}
-                onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)}
-                className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm min-h-[120px] resize-none"
-                placeholder="Inserisci qui eventuali note o dettagli sulla commessa..."
-              />
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Preventivo Accettato (€)</label>
+              <div className="relative">
+                 <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                 <input 
+                  type="number"
+                  name="budget" 
+                  value={formData.budget} 
+                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                  placeholder="Es: 15000" 
+                />
+              </div>
             </div>
-          </div>
-        </section>
-      </div>
-    </DrawerShell>
+          </section>
+  
+          {/* SEZIONE 2: DATE E STATUS */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-sky-400 rounded-full"></div>
+              <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Pianificazione</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inizio</label>
+                <DatePicker 
+                  value={formData.start_date} 
+                  onChange={handleDateChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato</label>
+                <Select 
+                  options={statusOptions}
+                  value={formData.status}
+                  onChange={handleStatusChange}
+                  placeholder="Seleziona stato..."
+                  icon={Activity}
+                />
+              </div>
+            </div>
+          </section>
+  
+          {/* SEZIONE 3: NOTE */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-slate-400 rounded-full"></div>
+              <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Note</span>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Libere</label>
+              <div className="relative">
+                <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
+                <textarea 
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm min-h-[120px] resize-none"
+                  placeholder="Inserisci qui eventuali note o dettagli sulla commessa..."
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+      </DrawerShell>
+      <EditClientDrawer 
+        isOpen={isAddClientOpen}
+        onClose={() => setIsAddClientOpen(false)}
+        client={pendingClientName ? { name: pendingClientName } : null}
+        onSave={handleSaveNewClient}
+      />
+    </>
   )
 }
 

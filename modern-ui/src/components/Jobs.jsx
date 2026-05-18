@@ -133,6 +133,15 @@ const Jobs = ({ onOpenProject }) => {
                 job.status === 'completed' ? 'bg-slate-50 text-slate-400' : 
                 'bg-amber-50 text-amber-500'
               }
+              stats={[
+                { label: 'Preventivo', value: `€ ${(job.budget || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}` },
+                { label: 'Costo Totale', value: `€ ${(job.costo_totale || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}` },
+                { 
+                  label: 'Utile Previsto', 
+                  value: `€ ${(job.utile_previsto || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}`,
+                  highlight: true
+                }
+              ]}
               footerItems={[
                 { icon: <Calendar size={12} />, label: job.start_date || 'N/D' }
               ]}

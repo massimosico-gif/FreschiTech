@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown, X, Check } from 'lucide-react'
+import { ChevronDown, Check, Search } from 'lucide-react'
 
-const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Icon }) => {
+const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Icon, onAddNew }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -28,21 +29,25 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
     .filter(opt => selectedValues.includes(opt.id))
     .map(opt => opt.label)
 
+  const filteredOptions = options.filter(opt => 
+    opt.label.toLowerCase().includes(search.toLowerCase())
+  )
+
   return (
     <div className="relative" ref={containerRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 cursor-pointer flex items-center justify-between transition-all ${
-          isOpen ? 'ring-2 ring-accent/20' : ''
+        className={`w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 cursor-pointer flex items-center justify-between transition-all shadow-sm ${
+          isOpen ? 'ring-2 ring-accent/20 bg-white border-white' : ''
         }`}
       >
-        {Icon && <Icon className="absolute left-4 text-slate-400" size={18} />}
+        {Icon && <Icon className="absolute left-5 text-slate-400" size={18} />}
         
-        <div className="flex flex-wrap gap-1 items-center overflow-hidden">
+        <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
           {selectedValues.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
                {selectedLabels.map(label => (
-                 <span key={label} className="bg-accent/10 text-accent px-2 py-0.5 rounded-lg text-[0.65rem] font-black uppercase tracking-tight">
+                 <span key={label} className="bg-accent/10 text-accent px-3 py-1 rounded-xl text-[0.65rem] font-black uppercase tracking-tight">
                    {label}
                  </span>
                ))}
@@ -56,26 +61,52 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100] max-h-64 overflow-y-auto animate-premium-in">
-          <div className="p-2 space-y-1">
-            {options.map(option => {
-              const isSelected = selectedValues.includes(option.id)
-              return (
-                <div 
-                  key={option.id}
-                  onClick={() => toggleOption(option.id)}
-                  className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-colors ${
-                    isSelected ? 'bg-accent/5 text-accent' : 'hover:bg-slate-50 text-slate-600'
-                  }`}
-                >
-                  <span className="text-sm font-bold">{option.label}</span>
-                  {isSelected && <Check size={16} className="text-accent" />}
-                </div>
-              )
-            })}
-            {options.length === 0 && (
-              <div className="p-4 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
-                Nessuna opzione disponibile
+        <div className="absolute top-full left-0 right-0 mt-3 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] shadow-2xl z-[100] overflow-hidden animate-premium-in p-2">
+          <div className="relative p-2" onClick={(e) => e.stopPropagation()}>
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Cerca o aggiungi operatore..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-10 pr-4 text-xs font-bold text-slate-700 focus:ring-0"
+            />
+          </div>
+
+          <div className="max-h-60 overflow-y-auto no-scrollbar py-2">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(option => {
+                const isSelected = selectedValues.includes(option.id)
+                return (
+                  <div 
+                    key={option.id}
+                    onClick={() => toggleOption(option.id)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-colors ${
+                      isSelected ? 'bg-accent/5 text-accent' : 'hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-widest">{option.label}</span>
+                    {isSelected && <Check size={14} className="text-accent" />}
+                  </div>
+                )
+              })
+            ) : (
+              <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
+                <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessun operatore trovato</p>
+                {onAddNew && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAddNew(search)
+                      setIsOpen(false)
+                      setSearch('')
+                    }}
+                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.6rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                  >
+                    {search ? `+ Aggiungi "${search}"` : '+ Aggiungi Nuovo Operatore'}
+                  </button>
+                )}
               </div>
             )}
           </div>

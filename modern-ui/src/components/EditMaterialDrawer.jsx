@@ -16,6 +16,7 @@ import {
 import DrawerShell from './ui/DrawerShell'
 import Select from './ui/Select'
 import DatePicker from './ui/DatePicker'
+import PhaseSelector from './ui/PhaseSelector'
 
 const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters, onSave }) => {
   const [errors, setErrors] = useState({})
@@ -46,6 +47,32 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
       }
     }).catch(console.error)
   }, [])
+
+  const handleAddNewPhase = async (newPhaseName) => {
+    const trimmed = newPhaseName.trim()
+    if (!trimmed) return
+
+    try {
+      const currentSettings = await invoke('get_global_settings')
+      const phases = currentSettings.phases_material || []
+
+      if (!phases.includes(trimmed)) {
+        const updatedPhases = [...phases, trimmed]
+        const newSettings = {
+          ...currentSettings,
+          phases_material: updatedPhases
+        }
+
+        await invoke('save_global_settings', { settings: newSettings })
+        setPhaseOptions(updatedPhases.map(p => ({ id: p, label: p })))
+      }
+
+      setFormData(prev => ({ ...prev, phase: trimmed }))
+    } catch (err) {
+      console.error("Errore nel salvataggio della nuova fase:", err)
+      alert("Impossibile salvare la nuova fase: " + err)
+    }
+  }
 
   const ccOptions = useMemo(() => [
     { id: null, label: '-- Generale (Nessun Centro) --' },
@@ -172,11 +199,11 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fase / Ambito</label>
-              <Select 
-                options={phaseOptions}
+              <PhaseSelector 
+                phases={phaseOptions}
                 value={formData.phase}
                 onChange={(val) => setFormData(p => ({...p, phase: val}))}
-                icon={Layers}
+                onAddNew={handleAddNewPhase}
               />
             </div>
             <div className="space-y-2">

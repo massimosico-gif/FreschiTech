@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
 import Select from './ui/Select'
+import CategorySelector from './ui/CategorySelector'
 
 const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
   const [errors, setErrors] = useState({})
@@ -36,6 +37,32 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
       }
     }).catch(console.error)
   }, [])
+
+  const handleAddNewCategory = async (newCategoryName) => {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+
+    try {
+      const currentSettings = await invoke('get_global_settings')
+      const categories = currentSettings.categories_cost_center || []
+
+      if (!categories.includes(trimmed)) {
+        const updatedCategories = [...categories, trimmed]
+        const newSettings = {
+          ...currentSettings,
+          categories_cost_center: updatedCategories
+        }
+
+        await invoke('save_global_settings', { settings: newSettings })
+        setCategoryOptions(updatedCategories.map(c => ({ id: c, label: c })))
+      }
+
+      setFormData(prev => ({ ...prev, category: trimmed }))
+    } catch (err) {
+      console.error("Errore nel salvataggio della nuova categoria:", err)
+      alert("Impossibile salvare la nuova categoria: " + err)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -119,11 +146,11 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
 
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Categoria</label>
-            <Select 
-              options={categoryOptions}
+            <CategorySelector 
+              categories={categoryOptions}
               value={formData.category}
               onChange={(val) => setFormData(p => ({...p, category: val}))}
-              icon={Tag}
+              onAddNew={handleAddNewCategory}
             />
           </div>
 

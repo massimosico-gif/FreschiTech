@@ -46,8 +46,8 @@
 .fh-input-group:hover .fh-input,
 .fh-input-group:hover .fh-btn-secondary {
   background: white !important;
-  border-color: rgba(139, 197, 63, 0.4) !important;
-  box-shadow: 0 12px 24px rgba(139, 197, 63, 0.15) !important;
+  border-color: rgba(227, 6, 19, 0.4) !important;
+  box-shadow: 0 12px 24px rgba(227, 6, 19, 0.15) !important;
 }
 
 .fh-input-iconic {
@@ -55,8 +55,8 @@
 }
 
 .fh-input:focus {
-  border-color: rgba(139, 197, 63, 0.5);
-  box-shadow: 0 0 0 4px rgba(139, 197, 63, 0.1);
+  border-color: rgba(227, 6, 19, 0.5);
+  box-shadow: 0 0 0 4px rgba(227, 6, 19, 0.1);
 }
 
 .fh-icon-wrapper {

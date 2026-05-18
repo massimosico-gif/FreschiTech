@@ -10,6 +10,7 @@
     "dialog:default",
     "fs:default",
     "process:allow-restart",
-    "core:app:allow-version"
+    "core:app:allow-version",
+    "updater:default"
   ]
 }

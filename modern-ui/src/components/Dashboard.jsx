@@ -31,10 +31,10 @@ const Dashboard = () => {
         setData(resData.chart_data || [])
         
         setStats([
-          { label: 'Fatturato Totale', value: `€ ${formatNumber(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
+          { label: 'Fatturato Preventivato', value: `€ ${formatNumber(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
           { label: 'Progetti Attivi', value: resData.invoices_count.toString(), icon: <FileText size={24} />, color: '#3b82f6' },
           { label: 'Clienti Lely', value: resData.clients_count.toString(), icon: <Users size={24} />, color: '#8b5cf6' },
-          { label: 'Alert Tecnici', value: `€ ${formatNumber(resData.total_pending)}`, icon: <CreditCard size={24} />, color: '#f43f5e' },
+          { label: 'Costi Totali Cantieri', value: `€ ${formatNumber(resData.total_pending)}`, icon: <CreditCard size={24} />, color: '#f43f5e' },
         ])
         setLoading(false)
       })
@@ -76,8 +76,8 @@ const Dashboard = () => {
         <div className="glass-panel p-10 rounded-[3.5rem] shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
           <div className="flex items-center justify-between mb-10">
             <div>
-              <h2 className="text-xl font-black text-[#0f172a] tracking-tight">Performance Mensile</h2>
-              <p className="text-[0.6rem] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">Dati anno corrente</p>
+              <h2 className="text-xl font-black text-[#0f172a] tracking-tight">Andamento Costi Mensili</h2>
+              <p className="text-[0.6rem] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">Costi totali registrati nell'anno corrente</p>
             </div>
             <div className={`px-4 py-1.5 bg-accent/10 text-accent rounded-full text-[0.6rem] font-black uppercase tracking-widest border border-accent/20`}>
               {new Date().getFullYear()}
