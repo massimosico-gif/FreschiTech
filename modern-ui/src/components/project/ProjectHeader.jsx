@@ -31,7 +31,7 @@ const ProjectHeader = ({ project, client, activeTab, setActiveTab, tabs, onBack 
             </div>
             <div className="flex items-center gap-2 text-slate-500">
               <Clock size={16} className="text-accent" />
-              <span className="text-sm font-bold">Distanza: {client?.distance || 0} km</span>
+              <span className="text-sm font-bold">Distanza: {project?.distance || 0} km</span>
             </div>
           </div>
         </div>

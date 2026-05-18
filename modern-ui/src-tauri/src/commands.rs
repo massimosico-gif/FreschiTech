@@ -42,6 +42,7 @@ pub struct Project {
     pub costo_totale: Option<f64>,
     pub valore_lavori: Option<f64>,
     pub utile_previsto: Option<f64>,
+    pub distance: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -350,7 +351,8 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
                 (SELECT COALESCE(SUM((base_cost * (1.0 + markup)) + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(hours * hourly_cost * (1.0 + markup)), 0.0) FROM labor WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses WHERE project_id = p.id)
-            ) as valore_lavori
+            ) as valore_lavori,
+            p.distance
         FROM projects p 
         LEFT JOIN clients c ON p.client_id = c.id 
         ORDER BY p.id DESC
@@ -375,6 +377,7 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             costo_totale: Some(costo_totale),
             valore_lavori: Some(valore_lavori),
             utile_previsto: Some(utile_previsto),
+            distance: row.get(11)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -388,21 +391,22 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
 #[tauri::command]
 pub fn save_project(project: Project) -> Result<(), String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
+    let dist = project.distance.unwrap_or(0);
     
     if let Some(id) = project.id {
         conn.execute(
-            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=? WHERE id=?",
+            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=?, distance=? WHERE id=?",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget, id
+                project.start_date, project.end_date, project.budget, dist, id
             ),
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget
+                project.start_date, project.end_date, project.budget, dist
             ),
         ).map_err(|e| e.to_string())?;
     }

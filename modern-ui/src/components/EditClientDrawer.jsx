@@ -6,8 +6,7 @@ import {
   Mail,
   User,
   Hash,
-  AlertCircle,
-  MapPin
+  AlertCircle
 } from 'lucide-react'
 import { validateVAT, validateTaxCode } from '../utils/validation'
 import AddressFormGroup from './ui/AddressFormGroup'
@@ -27,8 +26,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     tax_code: '',
     email: '',
     phone: '',
-    notes: '',
-    distance: 0
+    notes: ''
   })
 
   const validateField = (name, value) => {
@@ -81,8 +79,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           tax_code: client.tax_code || '',
           email: client.email || '',
           phone: client.phone || '',
-          notes: client.notes || '',
-          distance: client.distance || 0
+          notes: client.notes || ''
         }
         setFormData(data)
         setInitialData(data)
@@ -98,8 +95,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           tax_code: '',
           email: '',
           phone: '',
-          notes: '',
-          distance: 0
+          notes: ''
         }
         setFormData(newData)
         setInitialData(newData)
@@ -232,32 +228,13 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           </div>
         </section>
 
-        {/* SEZIONE 3: INDIRIZZO & DISTANZA */}
+        {/* SEZIONE 3: INDIRIZZO */}
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 bg-rose-400 rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Indirizzo Sede & Distanza</span>
+            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Indirizzo Sede</span>
           </div>
           <AddressFormGroup formData={formData} handleChange={handleChange} setFormData={setFormData} />
-          
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza dalla Sede (km)</label>
-            <div className="relative">
-              <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="number"
-                name="distance" 
-                value={formData.distance} 
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10) || 0;
-                  setFormData(prev => ({ ...prev, distance: val }));
-                }}
-                onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                placeholder="Distanza in km" 
-              />
-            </div>
-          </div>
         </section>
 
         {/* SEZIONE 4: NOTE */}

@@ -54,6 +54,7 @@ pub fn init_db() -> Result<()> {
             start_date TEXT,
             end_date TEXT,
             budget REAL DEFAULT 0.0,
+            distance INTEGER DEFAULT 0,
             FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
         )",
         [],
@@ -121,6 +122,7 @@ pub fn init_db() -> Result<()> {
     // Migrazione: aggiunta colonne se non esistono
     let _ = conn.execute("ALTER TABLE labor ADD COLUMN is_travel INTEGER DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE labor ADD COLUMN vehicle TEXT", []);
+    let _ = conn.execute("ALTER TABLE projects ADD COLUMN distance INTEGER DEFAULT 0", []);
 
     // Tabella Spese (Expenses)
     conn.execute(
