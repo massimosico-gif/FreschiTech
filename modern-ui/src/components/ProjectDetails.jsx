@@ -143,11 +143,13 @@ const ProjectDetails = ({ projectId, onBack }) => {
   const expenseTotalCost = expenses.reduce((acc, ex) => acc + ex.amount, 0)
   const expenseTotalSale = expenses.reduce((acc, ex) => acc + (ex.amount * (1 + ex.markup)), 0)
 
+  const projectTravelCost = (project.distance || 0) * (project.km_cost || 0.0)
+
   const stats = {
-    costoTotale: matTotalCost + ccTotalCost + laborTotalCost + expenseTotalCost,
-    valoreLavori: matTotalSale + ccTotalSale + laborTotalSale + expenseTotalSale,
+    costoTotale: matTotalCost + ccTotalCost + laborTotalCost + expenseTotalCost + projectTravelCost,
+    valoreLavori: matTotalSale + ccTotalSale + laborTotalSale + expenseTotalSale + projectTravelCost,
     preventivoAccettato: project.budget || 0,
-    utile: (matTotalSale + ccTotalSale + laborTotalSale + expenseTotalSale) - (matTotalCost + ccTotalCost + laborTotalCost + expenseTotalCost)
+    utile: (matTotalSale + ccTotalSale + laborTotalSale + expenseTotalSale + projectTravelCost) - (matTotalCost + ccTotalCost + laborTotalCost + expenseTotalCost + projectTravelCost)
   }
 
   const tabs = [

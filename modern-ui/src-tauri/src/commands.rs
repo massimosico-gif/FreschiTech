@@ -177,7 +177,13 @@ pub fn get_stats() -> serde_json::Value {
         |row| row.get(0)
     ).unwrap_or(0.0);
 
-    let total_pending = total_materials + total_cost_centers + total_labor + total_expenses;
+    let total_projects_travel: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(distance * km_cost), 0.0) FROM projects",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_pending = total_materials + total_cost_centers + total_labor + total_expenses + total_projects_travel;
 
     // 5. Monthly Chart Data (Costi per mese dell'anno corrente)
     let mut chart_data = vec![
@@ -208,6 +214,8 @@ pub fn get_stats() -> serde_json::Value {
             SELECT date, hours * hourly_cost + travel_cost as amount FROM labor
             UNION ALL
             SELECT date, amount FROM expenses
+            UNION ALL
+            SELECT start_date as date, distance * km_cost as amount FROM projects
         )
         WHERE substr(date, 1, 4) = strftime('%Y', 'now') AND date IS NOT NULL AND date != ''
         GROUP BY month
