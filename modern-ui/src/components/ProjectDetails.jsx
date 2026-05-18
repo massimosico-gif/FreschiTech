@@ -183,7 +183,7 @@ const ProjectDetails = ({ projectId, onBack }) => {
 
       <EditCostCenterDrawer isOpen={isCCDrawerOpen} onClose={() => setIsCCDrawerOpen(false)} cc={selectedCC} projectId={projectId} onSave={handleSaveCC} />
       <EditMaterialDrawer isOpen={isMatDrawerOpen} onClose={() => setIsMatDrawerOpen(false)} material={selectedMat} projectId={projectId} costCenters={costCenters} onSave={handleSaveMat} />
-      <EditLaborDrawer isOpen={isLaborDrawerOpen} onClose={() => setIsLaborDrawerOpen(false)} labor={selectedLabor} projectId={projectId} costCenters={costCenters} onSave={handleSaveLabor} />
+      <EditLaborDrawer isOpen={isLaborDrawerOpen} onClose={() => setIsLaborDrawerOpen(false)} labor={selectedLabor} projectId={projectId} project={project} costCenters={costCenters} onSave={handleSaveLabor} />
       <EditExpenseDrawer isOpen={isExpenseDrawerOpen} onClose={() => setIsExpenseDrawerOpen(false)} expense={selectedExpense} projectId={projectId} costCenters={costCenters} onSave={handleSaveExpense} />
       
       <ConfirmModal 

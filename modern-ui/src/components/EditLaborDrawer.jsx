@@ -8,7 +8,7 @@ import DatePicker from './ui/DatePicker'
 import PhaseSelector from './ui/PhaseSelector'
 import VehicleSelector from './ui/VehicleSelector'
 
-const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSave }) => {
+const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCenters, onSave }) => {
   const [employees, setEmployees] = useState([])
   
   const initialData = {
@@ -22,7 +22,8 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
     hourly_cost: 30.00,
     markup: 0.50,
     is_travel: false,
-    vehicle: 'Furgone 1'
+    vehicle: 'Furgone 1',
+    travel_cost: 0.0
   }
 
   const [formData, setFormData] = useState(initialData)
@@ -46,7 +47,8 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
       setFormData({
         ...labor,
         date: labor.date ? labor.date.split('T')[0] : new Date().toISOString().split('T')[0],
-        is_travel: !!labor.is_travel
+        is_travel: !!labor.is_travel,
+        travel_cost: labor.travel_cost || 0.0
       })
       setSelectedEmployeeIds([]) // In edit mode we don't use multi-select for now
       setIsChanged(false)
@@ -56,6 +58,20 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
       setIsChanged(false)
     }
   }, [labor, isOpen])
+
+  const toggleTravel = () => {
+    const newIsTravel = !formData.is_travel
+    const travelCostValue = newIsTravel && project ? (project.distance || 0) * (project.km_cost || 0.50) : 0.0
+    setFormData(prev => {
+      const newData = { 
+        ...prev, 
+        is_travel: newIsTravel,
+        travel_cost: travelCostValue
+      }
+      setIsChanged(JSON.stringify(newData) !== JSON.stringify(labor || initialData))
+      return newData
+    })
+  }
 
   const handleChange = (field, value) => {
     setFormData(prev => {
@@ -181,7 +197,8 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
           operator: emp.name,
           hourly_cost: emp.default_hourly_cost,
           hours: parseFloat(formData.hours),
-          markup: parseFloat(formData.markup)
+          markup: parseFloat(formData.markup),
+          travel_cost: parseFloat(formData.travel_cost) || 0.0
         }
       })
       onSave(entries)
@@ -191,7 +208,8 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
         ...formData,
         hours: parseFloat(formData.hours),
         hourly_cost: parseFloat(formData.hourly_cost),
-        markup: parseFloat(formData.markup)
+        markup: parseFloat(formData.markup),
+        travel_cost: parseFloat(formData.travel_cost) || 0.0
       })
     }
   }
@@ -252,7 +270,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Tipo Registrazione</label>
             <div 
-              onClick={() => handleChange('is_travel', !formData.is_travel)}
+              onClick={toggleTravel}
               className={`flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all border-2 ${
                 formData.is_travel 
                 ? 'bg-amber-50 border-amber-200 text-amber-700' 
@@ -361,24 +379,38 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, costCenters, onSav
         </div>
 
         {/* Riepilogo Economico */}
-        <div className={`p-6 rounded-[2rem] border flex justify-between items-center transition-colors ${
-          formData.is_travel ? 'bg-amber-500 text-white border-amber-400' : 'bg-accent text-white border-accent'
-        }`}>
-          <div>
-            <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">
-              Totale Vendita {formData.is_travel ? 'Trasferta' : 'Lavoro'} {!labor && selectedEmployeeIds.length > 1 ? `(${selectedEmployeeIds.length} pers.)` : ''}
-            </p>
-            <p className="text-2xl font-black">
-              € {((labor ? 1 : Math.max(1, selectedEmployeeIds.length)) * formData.hours * formData.hourly_cost * (1 + formData.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-60">Costo Aziendale Tot.</p>
-            <p className="text-lg font-black opacity-90">
-              € {((labor ? 1 : Math.max(1, selectedEmployeeIds.length)) * formData.hours * formData.hourly_cost).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const numPeople = labor ? 1 : Math.max(1, selectedEmployeeIds.length);
+          const laborCost = numPeople * formData.hours * formData.hourly_cost;
+          const travelCost = formData.is_travel ? (formData.travel_cost || 0) : 0;
+          const totalCost = laborCost + travelCost;
+          const totalSale = totalCost * (1 + formData.markup);
+          return (
+            <div className={`p-6 rounded-[2rem] border flex justify-between items-center transition-colors ${
+              formData.is_travel ? 'bg-amber-500 text-white border-amber-400' : 'bg-accent text-white border-accent'
+            }`}>
+              <div>
+                <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">
+                  Totale Vendita {formData.is_travel ? 'Trasferta' : 'Lavoro'} {!labor && selectedEmployeeIds.length > 1 ? `(${selectedEmployeeIds.length} pers.)` : ''}
+                </p>
+                <p className="text-2xl font-black">
+                  € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                </p>
+                {formData.is_travel && (
+                  <p className="text-[0.55rem] font-bold opacity-80 mt-1">
+                    (Viaggio: {project?.distance || 0} km × {project?.km_cost || 0.50} €/km = € {travelCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
+                  </p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-60">Costo Aziendale Tot.</p>
+                <p className="text-lg font-black opacity-90">
+                  € {totalCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          )
+        })()}
 
         <div className="pt-6 border-t border-slate-100 flex gap-4">
           <button 

@@ -55,6 +55,7 @@ pub fn init_db() -> Result<()> {
             end_date TEXT,
             budget REAL DEFAULT 0.0,
             distance INTEGER DEFAULT 0,
+            km_cost REAL DEFAULT 0.50,
             FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
         )",
         [],
@@ -113,6 +114,7 @@ pub fn init_db() -> Result<()> {
             markup REAL DEFAULT 0.0,
             is_travel INTEGER DEFAULT 0,
             vehicle TEXT,
+            travel_cost REAL DEFAULT 0.0,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
             FOREIGN KEY (cost_center_id) REFERENCES cost_centers (id) ON DELETE SET NULL
         )",
@@ -123,6 +125,8 @@ pub fn init_db() -> Result<()> {
     let _ = conn.execute("ALTER TABLE labor ADD COLUMN is_travel INTEGER DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE labor ADD COLUMN vehicle TEXT", []);
     let _ = conn.execute("ALTER TABLE projects ADD COLUMN distance INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE projects ADD COLUMN km_cost REAL DEFAULT 0.50", []);
+    let _ = conn.execute("ALTER TABLE labor ADD COLUMN travel_cost REAL DEFAULT 0.0", []);
 
     // Tabella Spese (Expenses)
     conn.execute(

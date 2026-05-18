@@ -27,7 +27,8 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     budget: 0,
-    distance: 0
+    distance: 0,
+    km_cost: 0.50
   })
 
   const statusOptions = [
@@ -113,7 +114,8 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
       ...formData,
       client_id: parseInt(formData.client_id),
       budget: parseFloat(formData.budget) || 0,
-      distance: parseInt(formData.distance) || 0
+      distance: parseInt(formData.distance) || 0,
+      km_cost: parseFloat(formData.km_cost) || 0.50
     }
     
     onSave(dataToSave)
@@ -134,7 +136,8 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
           start_date: job.start_date || '',
           end_date: job.end_date || '',
           budget: job.budget || 0,
-          distance: job.distance || 0
+          distance: job.distance || 0,
+          km_cost: job.km_cost !== undefined && job.km_cost !== null ? job.km_cost : 0.50
         }
         setFormData(data)
         setInitialData(data)
@@ -147,7 +150,8 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
           start_date: new Date().toISOString().split('T')[0],
           end_date: '',
           budget: 0,
-          distance: 0
+          distance: 0,
+          km_cost: 0.50
         }
         setFormData(newData)
         setInitialData(newData)
@@ -237,18 +241,35 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
-              <div className="relative">
-                 <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                 <input 
-                  type="number"
-                  name="distance" 
-                  value={formData.distance} 
-                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                  placeholder="Es: 45" 
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
+                <div className="relative">
+                   <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                   <input 
+                    type="number"
+                    name="distance" 
+                    value={formData.distance} 
+                    onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                    className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                    placeholder="Es: 45" 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Costo al Km (€/km)</label>
+                <div className="relative">
+                   <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                   <input 
+                    type="number"
+                    step="0.01"
+                    name="km_cost" 
+                    value={formData.km_cost} 
+                    onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                    className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                    placeholder="Es: 0.50" 
+                  />
+                </div>
               </div>
             </div>
           </section>

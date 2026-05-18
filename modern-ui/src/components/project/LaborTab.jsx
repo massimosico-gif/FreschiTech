@@ -83,8 +83,8 @@ const LaborTab = ({ labor, costCenters, onAdd, onEdit, onDelete }) => {
         case 'hours': valA = a.hours; valB = b.hours; break;
         case 'cost': valA = a.hourly_cost; valB = b.hourly_cost; break;
         case 'total': 
-          valA = a.hours * a.hourly_cost * (1 + a.markup); 
-          valB = b.hours * b.hourly_cost * (1 + b.markup); 
+          valA = ((a.hours * a.hourly_cost) + (a.travel_cost || 0.0)) * (1 + a.markup); 
+          valB = ((b.hours * b.hourly_cost) + (b.travel_cost || 0.0)) * (1 + b.markup); 
           break;
         default: valA = a.id; valB = b.id;
       }
@@ -226,9 +226,16 @@ const LaborTab = ({ labor, costCenters, onAdd, onEdit, onDelete }) => {
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-slate-600 leading-tight">{l.description || '-'}</span>
                       {l.is_travel && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <Plane size={10} className="text-amber-500" />
-                          <span className="text-[0.6rem] font-black text-amber-500 uppercase tracking-widest">Trasferta / Viaggio</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1">
+                            <Plane size={10} className="text-amber-500" />
+                            <span className="text-[0.6rem] font-black text-amber-500 uppercase tracking-widest">Trasferta / Viaggio</span>
+                          </div>
+                          {l.travel_cost > 0 && (
+                            <span className="text-[0.55rem] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-lg">
+                              Veicolo: € {l.travel_cost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -274,7 +281,7 @@ const LaborTab = ({ labor, costCenters, onAdd, onEdit, onDelete }) => {
                   <td className="px-8 py-6 text-right">
                     <div className="inline-block text-right">
                       <p className="text-sm font-black text-slate-800">
-                        € {(l.hours * l.hourly_cost * (1 + l.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                        € {(((l.hours * l.hourly_cost) + (l.travel_cost || 0.0)) * (1 + l.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </p>
                       <p className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">
                         Ric. {(l.markup * 100).toFixed(0)}%

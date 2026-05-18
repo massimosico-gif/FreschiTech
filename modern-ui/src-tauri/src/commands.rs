@@ -43,6 +43,7 @@ pub struct Project {
     pub valore_lavori: Option<f64>,
     pub utile_previsto: Option<f64>,
     pub distance: Option<i32>,
+    pub km_cost: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -89,6 +90,7 @@ pub struct Labor {
     pub markup: f64,
     pub is_travel: bool,
     pub vehicle: Option<String>,
+    pub travel_cost: Option<f64>,
     pub cost_center_name: Option<String>,
 }
 
@@ -343,16 +345,17 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             (
                 (SELECT COALESCE(SUM(quantity * unit_price), 0.0) FROM materials WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(base_cost + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
-                (SELECT COALESCE(SUM(hours * hourly_cost), 0.0) FROM labor WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM(hours * hourly_cost + travel_cost), 0.0) FROM labor WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE project_id = p.id)
             ) as costo_totale,
             (
                 (SELECT COALESCE(SUM(quantity * unit_price * (1.0 + markup)), 0.0) FROM materials WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM((base_cost * (1.0 + markup)) + shipping + install_fee), 0.0) FROM cost_centers WHERE project_id = p.id) +
-                (SELECT COALESCE(SUM(hours * hourly_cost * (1.0 + markup)), 0.0) FROM labor WHERE project_id = p.id) +
+                (SELECT COALESCE(SUM((hours * hourly_cost + travel_cost) * (1.0 + markup)), 0.0) FROM labor WHERE project_id = p.id) +
                 (SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses WHERE project_id = p.id)
             ) as valore_lavori,
-            p.distance
+            p.distance,
+            p.km_cost
         FROM projects p 
         LEFT JOIN clients c ON p.client_id = c.id 
         ORDER BY p.id DESC
@@ -378,6 +381,7 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             valore_lavori: Some(valore_lavori),
             utile_previsto: Some(utile_previsto),
             distance: row.get(11)?,
+            km_cost: row.get(12)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -392,21 +396,22 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
 pub fn save_project(project: Project) -> Result<(), String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let dist = project.distance.unwrap_or(0);
+    let k_cost = project.km_cost.unwrap_or(0.50);
     
     if let Some(id) = project.id {
         conn.execute(
-            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=?, distance=? WHERE id=?",
+            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=?, distance=?, km_cost=? WHERE id=?",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget, dist, id
+                project.start_date, project.end_date, project.budget, dist, k_cost, id
             ),
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance, km_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget, dist
+                project.start_date, project.end_date, project.budget, dist, k_cost
             ),
         ).map_err(|e| e.to_string())?;
     }
@@ -561,7 +566,8 @@ pub fn get_labor(project_id: i64) -> Result<Vec<Labor>, String> {
             markup: row.get(9)?,
             is_travel: row.get::<_, i32>(10)? != 0,
             vehicle: row.get(11)?,
-            cost_center_name: row.get(12)?,
+            travel_cost: Some(row.get(12)?),
+            cost_center_name: row.get(13)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -575,16 +581,17 @@ pub fn get_labor(project_id: i64) -> Result<Vec<Labor>, String> {
 #[tauri::command]
 pub fn save_labor(labor: Labor) -> Result<(), String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
+    let t_cost = labor.travel_cost.unwrap_or(0.0);
     
     if let Some(id) = labor.id {
         conn.execute(
-            "UPDATE labor SET cost_center_id=?, phase=?, date=?, operator=?, description=?, hours=?, hourly_cost=?, markup=?, is_travel=?, vehicle=? WHERE id=?",
-            (labor.cost_center_id, labor.phase, labor.date, labor.operator, labor.description, labor.hours, labor.hourly_cost, labor.markup, if labor.is_travel {1} else {0}, &labor.vehicle, id),
+            "UPDATE labor SET cost_center_id=?, phase=?, date=?, operator=?, description=?, hours=?, hourly_cost=?, markup=?, is_travel=?, vehicle=?, travel_cost=? WHERE id=?",
+            (labor.cost_center_id, labor.phase, labor.date, labor.operator, labor.description, labor.hours, labor.hourly_cost, labor.markup, if labor.is_travel {1} else {0}, &labor.vehicle, t_cost, id),
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO labor (project_id, cost_center_id, phase, date, operator, description, hours, hourly_cost, markup, is_travel, vehicle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (labor.project_id, labor.cost_center_id, labor.phase, labor.date, labor.operator, labor.description, labor.hours, labor.hourly_cost, labor.markup, if labor.is_travel {1} else {0}, &labor.vehicle),
+            "INSERT INTO labor (project_id, cost_center_id, phase, date, operator, description, hours, hourly_cost, markup, is_travel, vehicle, travel_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (labor.project_id, labor.cost_center_id, labor.phase, labor.date, labor.operator, labor.description, labor.hours, labor.hourly_cost, labor.markup, if labor.is_travel {1} else {0}, &labor.vehicle, t_cost),
         ).map_err(|e| e.to_string())?;
     }
     Ok(())
