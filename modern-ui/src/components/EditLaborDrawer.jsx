@@ -22,8 +22,10 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
     hourly_cost: 30.00,
     markup: 0.50,
     is_travel: false,
-    vehicle: 'Furgone 1',
-    travel_cost: 0.0
+    vehicle: 'Nessuno',
+    travel_cost: 0.0,
+    km: 0,
+    km_cost: 0.50
   }
 
   const [formData, setFormData] = useState(initialData)
@@ -44,22 +46,33 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
 
   useEffect(() => {
     if (labor) {
+      const isVeh = labor.vehicle && labor.vehicle !== 'Nessuno';
+      const laborKmCost = project?.km_cost || 0.50;
+      const laborKm = isVeh && labor.travel_cost > 0 
+        ? labor.travel_cost / laborKmCost 
+        : (project?.distance || 0);
+
       setFormData({
         ...labor,
         project_id: Number(labor.project_id || projectId),
         cost_center_id: labor.cost_center_id ? Number(labor.cost_center_id) : null,
         date: labor.date ? labor.date.split('T')[0] : new Date().toISOString().split('T')[0],
         is_travel: !!labor.is_travel,
-        travel_cost: labor.travel_cost || 0.0
+        travel_cost: labor.travel_cost || 0.0,
+        km: labor.km || laborKm,
+        km_cost: labor.km_cost || laborKmCost
       })
       setSelectedEmployeeIds([]) // In edit mode we don't use multi-select for now
       setIsChanged(false)
     } else {
-      setFormData(initialData)
+      setFormData({
+        ...initialData,
+        project_id: Number(projectId)
+      })
       setSelectedEmployeeIds([])
       setIsChanged(false)
     }
-  }, [labor, isOpen])
+  }, [labor, isOpen, project])
 
   const toggleTravel = () => {
     const newIsTravel = !formData.is_travel
@@ -77,7 +90,45 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
 
   const handleChange = (field, value) => {
     setFormData(prev => {
-      const newData = { ...prev, [field]: value }
+      let newData = { ...prev, [field]: value }
+      
+      if (field === 'vehicle') {
+        if (value && value !== 'Nessuno') {
+          // Inizializza km e km_cost con i valori di default della commessa se non sono già impostati
+          const kmVal = prev.km || (project?.distance || 0)
+          const kmCostVal = prev.km_cost || (project?.km_cost || 0.50)
+          newData = {
+            ...newData,
+            km: kmVal,
+            km_cost: kmCostVal,
+            travel_cost: kmVal * kmCostVal
+          }
+        } else {
+          // Se Mezzo è "Nessuno", azzera la trasferta (a meno che non sia attivato manualmente is_travel)
+          newData = {
+            ...newData,
+            km: 0,
+            km_cost: 0.0,
+            travel_cost: prev.is_travel ? (prev.travel_cost || 0) : 0.0
+          }
+        }
+      }
+      
+      setIsChanged(JSON.stringify(newData) !== JSON.stringify(labor || initialData))
+      return newData
+    })
+  }
+
+  const handleVehicleCostChange = (field, value) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value }
+      const km = field === 'km' ? value : (updated.km || 0)
+      const km_cost = field === 'km_cost' ? value : (updated.km_cost || 0)
+      
+      const newData = {
+        ...updated,
+        travel_cost: km * km_cost
+      }
       setIsChanged(JSON.stringify(newData) !== JSON.stringify(labor || initialData))
       return newData
     })
@@ -296,6 +347,40 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
           </div>
         </div>
 
+        {/* Se è selezionato un mezzo (non Nessuno), mostriamo Chilometri e Costo al Km */}
+        {formData.vehicle && formData.vehicle !== 'Nessuno' && (
+          <div className="grid grid-cols-2 gap-6 p-5 bg-amber-50/20 border border-amber-100 rounded-2xl animate-premium-in">
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-widest text-amber-700 ml-1">Chilometri Percorsi (km)</label>
+              <div className="relative group">
+                <Truck className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500" size={18} />
+                <input 
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.km || 0}
+                  onChange={(e) => handleVehicleCostChange('km', parseFloat(e.target.value) || 0)}
+                  className="w-full bg-white border border-amber-200/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-widest text-amber-700 ml-1">Costo Chilometrico (€/km)</label>
+              <div className="relative group">
+                <Euro className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500" size={18} />
+                <input 
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.km_cost || 0}
+                  onChange={(e) => handleVehicleCostChange('km_cost', parseFloat(e.target.value) || 0)}
+                  className="w-full bg-white border border-amber-200/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Descrizione Lavoro */}
         <div className="space-y-2">
           <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Note Attività</label>
@@ -388,23 +473,30 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
         {(() => {
           const numPeople = labor ? 1 : Math.max(1, selectedEmployeeIds.length);
           const laborCost = numPeople * formData.hours * formData.hourly_cost;
-          const travelCost = formData.is_travel ? (formData.travel_cost || 0) : 0;
+          const travelCost = formData.travel_cost || 0.0;
           const totalCost = laborCost + travelCost;
           const totalSale = totalCost * (1 + formData.markup);
+          const isVehicleActive = formData.vehicle && formData.vehicle !== 'Nessuno';
+          
           return (
             <div className={`p-6 rounded-[2rem] border flex justify-between items-center transition-colors ${
-              formData.is_travel ? 'bg-amber-500 text-white border-amber-400' : 'bg-accent text-white border-accent'
+              (formData.is_travel || isVehicleActive) ? 'bg-amber-500 text-white border-amber-400' : 'bg-accent text-white border-accent'
             }`}>
               <div>
                 <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">
-                  Totale Vendita {formData.is_travel ? 'Trasferta' : 'Lavoro'} {!labor && selectedEmployeeIds.length > 1 ? `(${selectedEmployeeIds.length} pers.)` : ''}
+                  Totale Vendita {(formData.is_travel || isVehicleActive) ? 'Trasferta' : 'Lavoro'} {!labor && selectedEmployeeIds.length > 1 ? `(${selectedEmployeeIds.length} pers.)` : ''}
                 </p>
                 <p className="text-2xl font-black">
                   € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                 </p>
-                {formData.is_travel && (
+                {isVehicleActive && (
                   <p className="text-[0.55rem] font-bold opacity-80 mt-1">
-                    (Viaggio: {project?.distance || 0} km × {project?.km_cost || 0.50} €/km = € {travelCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
+                    (Mezzo: {formData.vehicle} | {formData.km || 0} km × {formData.km_cost || 0.50} €/km = € {travelCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
+                  </p>
+                )}
+                {!isVehicleActive && formData.is_travel && (
+                  <p className="text-[0.55rem] font-bold opacity-80 mt-1">
+                    (Trasferta fissa commessa: {project?.distance || 0} km × {project?.km_cost || 0.50} €/km = € {travelCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
                   </p>
                 )}
               </div>
