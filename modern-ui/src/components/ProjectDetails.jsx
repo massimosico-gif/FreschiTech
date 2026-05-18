@@ -138,8 +138,8 @@ const ProjectDetails = ({ projectId, onBack }) => {
   const matTotalSale = materials.reduce((acc, m) => acc + (m.quantity * m.unit_price * (1 + m.markup)), 0)
   const ccTotalCost = costCenters.reduce((acc, cc) => acc + cc.base_cost + cc.shipping + cc.install_fee, 0)
   const ccTotalSale = costCenters.reduce((acc, cc) => acc + (cc.base_cost * (1 + cc.markup)) + cc.shipping + cc.install_fee, 0)
-  const laborTotalCost = labor.reduce((acc, l) => acc + (l.hours * l.hourly_cost), 0)
-  const laborTotalSale = labor.reduce((acc, l) => acc + (l.hours * l.hourly_cost * (1 + l.markup)), 0)
+  const laborTotalCost = labor.reduce((acc, l) => acc + (l.hours * l.hourly_cost) + (l.travel_cost || 0.0), 0)
+  const laborTotalSale = labor.reduce((acc, l) => acc + ((l.hours * l.hourly_cost) + (l.travel_cost || 0.0)) * (1 + l.markup), 0)
   const expenseTotalCost = expenses.reduce((acc, ex) => acc + ex.amount, 0)
   const expenseTotalSale = expenses.reduce((acc, ex) => acc + (ex.amount * (1 + ex.markup)), 0)
 

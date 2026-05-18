@@ -166,7 +166,7 @@ pub fn get_stats() -> serde_json::Value {
     ).unwrap_or(0.0);
 
     let total_labor: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(hours * hourly_cost), 0.0) FROM labor",
+        "SELECT COALESCE(SUM(hours * hourly_cost + travel_cost), 0.0) FROM labor",
         [],
         |row| row.get(0)
     ).unwrap_or(0.0);
@@ -205,7 +205,7 @@ pub fn get_stats() -> serde_json::Value {
             UNION ALL
             SELECT p.start_date as date, base_cost + shipping + install_fee as amount FROM cost_centers cc JOIN projects p ON cc.project_id = p.id
             UNION ALL
-            SELECT date, hours * hourly_cost as amount FROM labor
+            SELECT date, hours * hourly_cost + travel_cost as amount FROM labor
             UNION ALL
             SELECT date, amount FROM expenses
         )
