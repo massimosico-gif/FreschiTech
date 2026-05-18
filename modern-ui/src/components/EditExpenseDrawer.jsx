@@ -14,7 +14,7 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
 
   const initialData = {
-    project_id: projectId,
+    project_id: Number(projectId),
     cost_center_id: null,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
@@ -110,6 +110,7 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
 
     onSave({
       ...formData,
+      project_id: Number(formData.project_id || projectId),
       description: finalDescription,
       amount: parseFloat(formData.amount),
       markup: parseFloat(formData.markup)

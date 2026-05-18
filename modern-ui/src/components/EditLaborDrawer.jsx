@@ -12,7 +12,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
   const [employees, setEmployees] = useState([])
   
   const initialData = {
-    project_id: projectId,
+    project_id: Number(projectId),
     cost_center_id: null,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
@@ -46,6 +46,8 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
     if (labor) {
       setFormData({
         ...labor,
+        project_id: Number(labor.project_id || projectId),
+        cost_center_id: labor.cost_center_id ? Number(labor.cost_center_id) : null,
         date: labor.date ? labor.date.split('T')[0] : new Date().toISOString().split('T')[0],
         is_travel: !!labor.is_travel,
         travel_cost: labor.travel_cost || 0.0
@@ -194,10 +196,12 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
         const emp = employees.find(e => e.id === id)
         return {
           ...formData,
+          project_id: Number(projectId),
+          cost_center_id: formData.cost_center_id ? Number(formData.cost_center_id) : null,
           operator: emp.name,
           hourly_cost: emp.default_hourly_cost,
-          hours: parseFloat(formData.hours),
-          markup: parseFloat(formData.markup),
+          hours: parseFloat(formData.hours) || 0,
+          markup: parseFloat(formData.markup) || 0,
           travel_cost: parseFloat(formData.travel_cost) || 0.0
         }
       })
@@ -206,9 +210,11 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
       // Single entry save (edit or fallback)
       onSave({
         ...formData,
-        hours: parseFloat(formData.hours),
-        hourly_cost: parseFloat(formData.hourly_cost),
-        markup: parseFloat(formData.markup),
+        project_id: Number(formData.project_id || projectId),
+        cost_center_id: formData.cost_center_id ? Number(formData.cost_center_id) : null,
+        hours: parseFloat(formData.hours) || 0,
+        hourly_cost: parseFloat(formData.hourly_cost) || 0,
+        markup: parseFloat(formData.markup) || 0,
         travel_cost: parseFloat(formData.travel_cost) || 0.0
       })
     }

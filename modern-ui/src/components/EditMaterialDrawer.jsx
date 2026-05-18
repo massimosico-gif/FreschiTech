@@ -21,7 +21,7 @@ import PhaseSelector from './ui/PhaseSelector'
 const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters, onSave }) => {
   const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
-    project_id: projectId,
+    project_id: Number(projectId),
     cost_center_id: null,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
@@ -95,7 +95,7 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
         }
       } else {
         data = {
-          project_id: projectId,
+          project_id: Number(projectId),
           cost_center_id: null,
           phase: 'Generale',
           date: new Date().toISOString().split('T')[0],
@@ -143,6 +143,7 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
     
     const dataToSave = {
       ...formData,
+      project_id: Number(formData.project_id || projectId),
       cost_center_id: formData.cost_center_id ? parseInt(formData.cost_center_id) : null,
       quantity: parseFloat(formData.quantity) || 0,
       unit_price: parseFloat(formData.unit_price) || 0,

@@ -16,7 +16,7 @@ import CategorySelector from './ui/CategorySelector'
 const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
   const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
-    project_id: projectId,
+    project_id: Number(projectId),
     brand: '',
     model: '',
     category: 'Robot Lely',
@@ -77,7 +77,7 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
         })
       } else {
         setFormData({
-          project_id: projectId,
+          project_id: Number(projectId),
           brand: '',
           model: '',
           category: 'Robot Lely',
@@ -110,6 +110,7 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
     
     const dataToSave = {
       ...formData,
+      project_id: Number(formData.project_id || projectId),
       base_cost: parseFloat(formData.base_cost) || 0,
       markup: parseFloat(formData.markup) || 0,
       shipping: parseFloat(formData.shipping) || 0,

@@ -406,6 +406,13 @@ pub fn save_project(project: Project) -> Result<(), String> {
                 project.start_date, project.end_date, project.budget, dist, k_cost, id
             ),
         ).map_err(|e| e.to_string())?;
+
+        // Aggiorna automaticamente tutte le spese di viaggio (trasferta) esistenti per questo progetto
+        let new_travel_cost = (dist as f64) * k_cost;
+        conn.execute(
+            "UPDATE labor SET travel_cost = ? WHERE project_id = ? AND is_travel = 1",
+            (new_travel_cost, id),
+        ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
             "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance, km_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
