@@ -3,9 +3,17 @@ import { MapPin, Search, Navigation } from 'lucide-react'
 import { useMunicipalitySearch } from '../../hooks/useMunicipalitySearch'
 
 const AddressFormGroup = ({ formData, handleChange, setFormData }) => {
+  // Autocompletamento Città Singolo
   const [showCityResults, setShowCityResults] = useState(false)
   const { results: cityResults, loading: cityLoading } = useMunicipalitySearch(formData.city)
   const cityRef = useRef(null)
+
+  // Autocompletamento Indirizzo Completo
+  const [searchQuery, setSearchQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const autocompleteTimeoutRef = useRef(null)
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -17,18 +25,132 @@ const AddressFormGroup = ({ formData, handleChange, setFormData }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const selectCity = (city) => {
     setFormData(prev => ({
       ...prev,
       city: city.nome,
-      province: city.sigla, // Usiamo sigla (es. UD)
+      province: city.sigla,
       zip_code: city.cap[0] || ''
     }))
     setShowCityResults(false)
   }
 
+  const fetchSuggestions = async (query) => {
+    if (!query || query.trim().length < 3) {
+      setSuggestions([])
+      return
+    }
+    setLoading(true)
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1&countrycodes=it&email=freschitechsrl@pec.it`
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSuggestions(data)
+      }
+    } catch (e) {
+      console.error('Errore nel recupero dei suggerimenti indirizzo:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value
+    setSearchQuery(val)
+    setShowSuggestions(true)
+
+    if (autocompleteTimeoutRef.current) {
+      clearTimeout(autocompleteTimeoutRef.current)
+    }
+    autocompleteTimeoutRef.current = setTimeout(() => {
+      fetchSuggestions(val)
+    }, 450)
+  }
+
+  const selectSuggestion = (item) => {
+    const addr = item.address || {}
+    const streetVal = `${addr.road || ''} ${addr.house_number || ''}`.trim()
+    const cityVal = addr.city || addr.town || addr.village || addr.municipality || ''
+    const zipVal = addr.postcode || ''
+    
+    let provVal = ''
+    const provinceKey = Object.keys(addr).find(k => k.startsWith('ISO3166-2-lvl'))
+    if (provinceKey && addr[provinceKey].includes('-')) {
+      provVal = addr[provinceKey].split('-')[1].toUpperCase()
+    } else if (addr.county) {
+      provVal = addr.county.replace(/provincia di/i, '').trim().substring(0, 2).toUpperCase()
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      street: streetVal,
+      city: cityVal,
+      zip_code: zipVal,
+      province: provVal
+    }))
+    
+    setSuggestions([])
+    setShowSuggestions(false)
+    setSearchQuery('')
+  }
+
   return (
     <div className="space-y-6">
+      {/* Ricerca Indirizzo Completo */}
+      <div className="space-y-2 relative">
+        <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">
+          Cerca Indirizzo Completo (Autocompletamento)
+        </label>
+        <div className="relative">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text"
+            value={searchQuery} 
+            onChange={handleSearchChange}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            onFocus={() => { if (searchQuery.length >= 3) setShowSuggestions(true) }}
+            className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-12 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+            placeholder="Scrivi via, comune... es: Salita Pertoldi Pagnacco" 
+            autoComplete="off"
+          />
+          {loading && (
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-300 border-t-accent" />
+            </div>
+          )}
+        </div>
+        
+        {showSuggestions && suggestions.length > 0 && (
+          <ul className="absolute z-50 left-0 right-0 top-full mt-1 bg-white/95 backdrop-blur-md border border-slate-100 rounded-2xl shadow-xl max-h-60 overflow-y-auto overflow-x-hidden divide-y divide-slate-100">
+            {suggestions.map((item, idx) => (
+              <li 
+                key={idx} 
+                onClick={() => selectSuggestion(item)}
+                className="px-5 py-3 hover:bg-accent/10 cursor-pointer text-xs font-bold text-slate-700 transition-colors flex items-start gap-2.5"
+              >
+                <MapPin size={14} className="text-accent mt-0.5 shrink-0" />
+                <span className="text-left leading-normal">{item.display_name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="border-t border-slate-100/50 my-2"></div>
+
       {/* City & Autocomplete */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-2 relative" ref={cityRef}>
