@@ -117,10 +117,21 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
     return JSON.stringify(formData) !== initialData
   }, [formData, initialData])
 
+  const isSaveDisabled = useMemo(() => {
+    const isPhaseMissing = !formData.phase || !formData.phase.trim()
+    const isCodeMissing = !formData.code || !formData.code.trim()
+    const isDescriptionMissing = !formData.description || !formData.description.trim()
+    const isNotDirtyEdit = material && !isDirty
+    return isPhaseMissing || isCodeMissing || isDescriptionMissing || isNotDirtyEdit
+  }, [formData.phase, formData.code, formData.description, material, isDirty])
+
   const validateField = (name, value) => {
     let error = ''
     if (name === 'description' && !value) {
       error = 'La descrizione è obbligatoria'
+    }
+    if (name === 'code' && !value) {
+      error = 'Il codice è obbligatorio'
     }
     if (name === 'quantity' && value <= 0) {
       error = 'La quantità deve essere maggiore di 0'
@@ -137,9 +148,10 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
 
   const handleSaveInternal = () => {
     const isDescValid = validateField('description', formData.description)
+    const isCodeValid = validateField('code', formData.code)
     const isQtyValid = validateField('quantity', formData.quantity)
     
-    if (!isDescValid || !isQtyValid) return
+    if (!isDescValid || !isCodeValid || !isQtyValid) return
     
     const dataToSave = {
       ...formData,
@@ -168,9 +180,9 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
           <button 
             type="button" 
             onClick={handleSaveInternal} 
-            disabled={!isDirty}
+            disabled={isSaveDisabled}
             className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 ${
-              isDirty 
+              !isSaveDisabled 
               ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
               : 'bg-slate-100 text-slate-300 shadow-none cursor-not-allowed'
             }`}
@@ -227,11 +239,19 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
 
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-1 space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice</label>
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice *</label>
               <div className="relative">
-                <Hash className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input name="code" value={formData.code} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" placeholder="Es: MAT-01" />
+                <Hash className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.code ? 'text-rose-500' : 'text-slate-400'}`} size={16} />
+                <input 
+                  name="code" 
+                  value={formData.code} 
+                  onChange={handleChange} 
+                  onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className={`w-full bg-white/50 border rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.code ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`} 
+                  placeholder="Es: MAT-01" 
+                />
               </div>
+              {errors.code && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.code}</p>}
             </div>
             <div className="col-span-2 space-y-2">
               <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione *</label>
