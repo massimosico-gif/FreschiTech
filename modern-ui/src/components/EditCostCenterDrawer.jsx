@@ -119,6 +119,9 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
     
     onSave(dataToSave)
   }
+  const isModelMissing = !formData.model || !formData.model.trim()
+  const isCategoryMissing = !formData.category || !formData.category.trim()
+  const isSaveDisabled = isModelMissing || isCategoryMissing
 
   return (
     <DrawerShell
@@ -132,7 +135,16 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
           <button type="button" onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-slate-200 transition-all">
             Annulla
           </button>
-          <button type="button" onClick={handleSaveInternal} className="flex-1 py-4 bg-accent text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 flex items-center justify-center gap-2">
+          <button 
+            type="button" 
+            onClick={handleSaveInternal} 
+            disabled={isSaveDisabled}
+            className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
+              !isSaveDisabled
+              ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
+              : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
+            }`}
+          >
             <Save size={18} /> Salva Centro
           </button>
         </>
