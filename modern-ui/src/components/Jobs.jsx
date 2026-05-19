@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Plus, Search, Briefcase, Loader2, Calendar, User } from 'lucide-react'
+import { Plus, Search, Briefcase, Loader2, Calendar, User, Activity } from 'lucide-react'
 import EntityCard from './ui/EntityCard'
 import EditJobDrawer from './EditJobDrawer'
 import ConfirmModal from './ui/ConfirmModal'
+import Select from './ui/Select'
 
 const Jobs = ({ onOpenProject }) => {
   const [search, setSearch] = useState('')
@@ -14,6 +15,15 @@ const Jobs = ({ onOpenProject }) => {
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState(null)
+
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const statusFilterOptions = [
+    { id: 'all', label: 'Tutti gli stati' },
+    { id: 'active', label: 'Attive / In corso', color: 'bg-green-500' },
+    { id: 'completed', label: 'Completate', color: 'bg-slate-400' },
+    { id: 'on_hold', label: 'Sospese', color: 'bg-amber-500' }
+  ]
 
   const loadJobs = () => {
     setLoading(true)
@@ -32,10 +42,14 @@ const Jobs = ({ onOpenProject }) => {
     loadJobs()
   }, [])
 
-  const filteredJobs = jobs.filter(j => 
-    j.name.toLowerCase().includes(search.toLowerCase()) || 
-    (j.client_name && j.client_name.toLowerCase().includes(search.toLowerCase()))
-  )
+  const filteredJobs = jobs.filter(j => {
+    const matchesSearch = j.name.toLowerCase().includes(search.toLowerCase()) || 
+      (j.client_name && j.client_name.toLowerCase().includes(search.toLowerCase()))
+    
+    const matchesStatus = statusFilter === 'all' || j.status === statusFilter
+    
+    return matchesSearch && matchesStatus
+  })
 
   const handleEdit = (job) => {
     setSelectedJob(job)
@@ -87,21 +101,31 @@ const Jobs = ({ onOpenProject }) => {
           <p className="text-[0.7rem] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">Gestione cantieri e attività</p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="relative group">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
+          <div className="relative group flex-1 sm:flex-initial">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-accent transition-colors" size={18} />
             <input 
               type="text" 
               placeholder="Cerca commessa o cliente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl py-3 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all w-64 shadow-sm"
+              className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl py-3.5 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all w-full sm:w-64 shadow-sm"
+            />
+          </div>
+
+          <div className="w-full sm:w-56">
+            <Select 
+              options={statusFilterOptions}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              icon={Activity}
+              placeholder="Filtra per stato"
             />
           </div>
           
           <button 
             onClick={handleAdd}
-            className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-accent/30 transition-all hover:-translate-y-1"
+            className="flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-accent/30 transition-all hover:-translate-y-1 whitespace-nowrap"
           >
             <Plus size={18} />
             Nuova Commessa
