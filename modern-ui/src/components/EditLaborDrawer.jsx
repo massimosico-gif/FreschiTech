@@ -453,7 +453,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
         </div>
 
         {/* Quantità e Costi */}
-        <div className="grid grid-cols-3 gap-6">
+        <div className={`grid gap-6 ${labor ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ore (per pers.)</label>
             <div className="relative group">
@@ -469,23 +469,22 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Orario (€)</label>
-            <div className="relative group">
-              <Euro className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent transition-colors" size={18} />
-              <input 
-                required
-                type="number"
-                step="0.01"
-                disabled={!labor && selectedEmployeeIds.length > 0} // In multi-mode we use employee default costs
-                value={formData.hourly_cost}
-                onChange={(e) => handleChange('hourly_cost', e.target.value)}
-                className={`w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all ${
-                  !labor && selectedEmployeeIds.length > 0 ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              />
+          {labor && (
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Orario (€)</label>
+              <div className="relative group">
+                <Euro className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent transition-colors" size={18} />
+                <input 
+                  required
+                  type="number"
+                  step="0.01"
+                  value={formData.hourly_cost}
+                  onChange={(e) => handleChange('hourly_cost', e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
+                />
+              </div>
             </div>
-          </div>
+          )}
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ricarico (%)</label>
             <div className="relative group">
