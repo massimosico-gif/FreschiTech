@@ -25,6 +25,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     vat_id: '',
     tax_code: '',
     email: '',
+    pec: '',
     phone: '',
     notes: ''
   })
@@ -160,6 +161,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           vat_id: client.vat_id || '',
           tax_code: client.tax_code || '',
           email: client.email || '',
+          pec: client.pec || '',
           phone: client.phone || '',
           notes: client.notes || ''
         }
@@ -179,6 +181,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           vat_id: '',
           tax_code: '',
           email: '',
+          pec: '',
           phone: '',
           notes: ''
         }
@@ -306,17 +309,32 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Email</label>
-            <div className="relative">
-               <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-               <input 
-                name="email" 
-                value={formData.email} 
-                onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                placeholder="esempio@lely.com" 
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Email</label>
+              <div className="relative">
+                 <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                 <input 
+                  name="email" 
+                  value={formData.email} 
+                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                  placeholder="esempio@lely.com" 
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">PEC</label>
+              <div className="relative">
+                 <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                 <input 
+                  name="pec" 
+                  value={formData.pec || ''} 
+                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                  placeholder="esempio@pec.it" 
+                />
+              </div>
             </div>
           </div>
         </section>

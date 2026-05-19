@@ -23,6 +23,7 @@ pub struct Client {
     pub vat_id: Option<String>,
     pub tax_code: Option<String>,
     pub email: Option<String>,
+    pub pec: Option<String>,
     pub phone: Option<String>,
     pub notes: Option<String>,
     pub distance: Option<i32>,
@@ -316,7 +317,7 @@ pub fn search_municipalities(query: String) -> Result<Vec<Municipality>, String>
 #[tauri::command]
 pub fn get_clients() -> Result<Vec<Client>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT * FROM clients ORDER BY name ASC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, type, name, street, city, zip_code, province, vat_id, tax_code, email, pec, phone, notes, distance FROM clients ORDER BY name ASC").map_err(|e| e.to_string())?;
     let client_iter = stmt.query_map([], |row| {
         Ok(Client {
             id: Some(row.get(0)?),
@@ -329,9 +330,10 @@ pub fn get_clients() -> Result<Vec<Client>, String> {
             vat_id: row.get(7)?,
             tax_code: row.get(8)?,
             email: row.get(9)?,
-            phone: row.get(10)?,
-            notes: row.get(11)?,
-            distance: row.get(12)?,
+            pec: row.get(10)?,
+            phone: row.get(11)?,
+            notes: row.get(12)?,
+            distance: row.get(13)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -348,27 +350,28 @@ pub fn save_client(client: Client) -> Result<(), String> {
     
     if let Some(id) = client.id {
         conn.execute(
-            "UPDATE clients SET type=?, name=?, street=?, city=?, zip_code=?, province=?, vat_id=?, tax_code=?, email=?, phone=?, notes=?, distance=? WHERE id=?",
+            "UPDATE clients SET type=?, name=?, street=?, city=?, zip_code=?, province=?, vat_id=?, tax_code=?, email=?, pec=?, phone=?, notes=?, distance=? WHERE id=?",
             [
                 &client.type_, &client.name, 
                 &client.street.unwrap_or_default(), &client.city.unwrap_or_default(),
                 &client.zip_code.unwrap_or_default(), &client.province.unwrap_or_default(),
                 &client.vat_id.unwrap_or_default(), &client.tax_code.unwrap_or_default(),
-                &client.email.unwrap_or_default(), &client.phone.unwrap_or_default(),
-                &client.notes.unwrap_or_default(), &client.distance.unwrap_or(0).to_string(),
-                &id.to_string()
+                &client.email.unwrap_or_default(), &client.pec.unwrap_or_default(),
+                &client.phone.unwrap_or_default(), &client.notes.unwrap_or_default(),
+                &client.distance.unwrap_or(0).to_string(), &id.to_string()
             ],
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO clients (type, name, street, city, zip_code, province, vat_id, tax_code, email, phone, notes, distance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO clients (type, name, street, city, zip_code, province, vat_id, tax_code, email, pec, phone, notes, distance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 &client.type_, &client.name, 
                 &client.street.unwrap_or_default(), &client.city.unwrap_or_default(),
                 &client.zip_code.unwrap_or_default(), &client.province.unwrap_or_default(),
                 &client.vat_id.unwrap_or_default(), &client.tax_code.unwrap_or_default(),
-                &client.email.unwrap_or_default(), &client.phone.unwrap_or_default(),
-                &client.notes.unwrap_or_default(), &client.distance.unwrap_or(0).to_string()
+                &client.email.unwrap_or_default(), &client.pec.unwrap_or_default(),
+                &client.phone.unwrap_or_default(), &client.notes.unwrap_or_default(),
+                &client.distance.unwrap_or(0).to_string()
             ],
         ).map_err(|e| e.to_string())?;
     }

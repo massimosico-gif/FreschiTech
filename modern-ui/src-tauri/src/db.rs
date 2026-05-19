@@ -36,6 +36,7 @@ pub fn init_db() -> Result<()> {
             vat_id TEXT,
             tax_code TEXT,
             email TEXT,
+            pec TEXT,
             phone TEXT,
             notes TEXT,
             distance INTEGER DEFAULT 0
@@ -64,6 +65,7 @@ pub fn init_db() -> Result<()> {
 
     // Migrazione per database esistenti
     let _ = conn.execute("ALTER TABLE projects ADD COLUMN address TEXT", []);
+    let _ = conn.execute("ALTER TABLE clients ADD COLUMN pec TEXT", []);
 
     // Tabella Centri di Costo (Cost Centers)
     conn.execute(
