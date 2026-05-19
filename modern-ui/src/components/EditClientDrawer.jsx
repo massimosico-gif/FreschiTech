@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Building2, 
   Save, 
@@ -6,10 +6,10 @@ import {
   Mail,
   User,
   Hash,
-  AlertCircle
+  AlertCircle,
+  MapPin
 } from 'lucide-react'
 import { validateVAT, validateTaxCode } from '../utils/validation'
-import AddressFormGroup from './ui/AddressFormGroup'
 import DrawerShell from './ui/DrawerShell'
 
 const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
@@ -63,6 +63,88 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
 
   const isDirty = initialData && JSON.stringify(formData) !== JSON.stringify(initialData)
 
+  const [addressQuery, setAddressQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const autocompleteTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const fetchSuggestions = async (query) => {
+    if (!query || query.trim().length < 3) {
+      setSuggestions([])
+      return
+    }
+    setIsLoadingSuggestions(true)
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1&countrycodes=it&email=freschitechsrl@pec.it`
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
+      if (res.ok) {
+        const data = await res.json()
+        setSuggestions(data)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsLoadingSuggestions(false)
+    }
+  }
+
+  const handleAddressChange = (e) => {
+    const val = e.target.value
+    setAddressQuery(val)
+    setShowSuggestions(true)
+    
+    setFormData(prev => ({
+      ...prev,
+      street: val,
+      city: '',
+      zip_code: '',
+      province: ''
+    }))
+
+    if (autocompleteTimeoutRef.current) {
+      clearTimeout(autocompleteTimeoutRef.current)
+    }
+    autocompleteTimeoutRef.current = setTimeout(() => {
+      fetchSuggestions(val)
+    }, 450)
+  }
+
+  const selectSuggestion = (item) => {
+    const addr = item.address || {}
+    const streetVal = `${addr.road || ''} ${addr.house_number || ''}`.trim()
+    const cityVal = addr.city || addr.town || addr.village || addr.municipality || ''
+    const zipVal = addr.postcode || ''
+    
+    let provVal = ''
+    const provinceKey = Object.keys(addr).find(k => k.startsWith('ISO3166-2-lvl'))
+    if (provinceKey && addr[provinceKey].includes('-')) {
+      provVal = addr[provinceKey].split('-')[1].toUpperCase()
+    } else if (addr.county) {
+      provVal = addr.county.replace(/provincia di/i, '').trim().substring(0, 2).toUpperCase()
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      street: streetVal,
+      city: cityVal,
+      zip_code: zipVal,
+      province: provVal
+    }))
+
+    setAddressQuery(item.display_name)
+    setSuggestions([])
+    setShowSuggestions(false)
+  }
+
   useEffect(() => {
     if (isOpen) {
       setErrors({})
@@ -83,6 +165,9 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
         }
         setFormData(data)
         setInitialData(data)
+
+        const addrString = `${client.street || ''}${client.city ? `, ${client.city}` : ''}${client.zip_code ? ` ${client.zip_code}` : ''}${client.province ? ` (${client.province})` : ''}`.trim().replace(/^,\s*/, '').replace(/,\s*$/, '')
+        setAddressQuery(addrString)
       } else {
         const newData = {
           type: 'company',
@@ -99,7 +184,10 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
         }
         setFormData(newData)
         setInitialData(newData)
+        setAddressQuery('')
       }
+      setSuggestions([])
+      setShowSuggestions(false)
     }
   }, [isOpen, client])
 
@@ -239,7 +327,43 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
             <div className="w-1.5 h-6 bg-rose-400 rounded-full"></div>
             <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Indirizzo Sede</span>
           </div>
-          <AddressFormGroup formData={formData} handleChange={handleChange} setFormData={setFormData} />
+          
+          <div className="space-y-2 relative">
+            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Completo</label>
+            <div className="relative">
+              <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text"
+                value={addressQuery} 
+                onChange={handleAddressChange}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                onFocus={() => { if (addressQuery.length >= 3) setShowSuggestions(true) }}
+                className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-12 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                placeholder="Scrivi via, comune... es: Salita Pertoldi Pagnacco" 
+                autoComplete="off"
+              />
+              {isLoadingSuggestions && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-300 border-t-accent" />
+                </div>
+              )}
+            </div>
+            
+            {showSuggestions && suggestions.length > 0 && (
+              <ul className="absolute z-50 left-0 right-0 top-full mt-1 bg-white/95 backdrop-blur-md border border-slate-100 rounded-2xl shadow-xl max-h-60 overflow-y-auto overflow-x-hidden divide-y divide-slate-100 animate-premium-in">
+                {suggestions.map((item, idx) => (
+                  <li 
+                    key={idx} 
+                    onClick={() => selectSuggestion(item)}
+                    className="px-5 py-3 hover:bg-accent/10 cursor-pointer text-xs font-bold text-slate-700 transition-colors flex items-start gap-2.5"
+                  >
+                    <MapPin size={14} className="text-accent mt-0.5 shrink-0" />
+                    <span className="text-left leading-normal">{item.display_name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         {/* SEZIONE 4: NOTE */}
