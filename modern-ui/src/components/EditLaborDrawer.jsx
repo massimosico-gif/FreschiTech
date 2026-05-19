@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { X, Calendar, User, Clock, Euro, Target, Layers, FileText, Activity, Truck, Plane, Users } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
@@ -8,12 +8,13 @@ import DatePicker from './ui/DatePicker'
 import PhaseSelector from './ui/PhaseSelector'
 import VehicleSelector from './ui/VehicleSelector'
 
-const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCenters, onSave }) => {
+const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCenters, onSave, defaultCostCenterId = null }) => {
   const [employees, setEmployees] = useState([])
+  const [vehiclesData, setVehiclesData] = useState([])
   
-  const initialData = {
+  const initialData = useMemo(() => ({
     project_id: Number(projectId),
-    cost_center_id: null,
+    cost_center_id: defaultCostCenterId,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
     operator: '', // Fallback for single edit
@@ -26,7 +27,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
     travel_cost: 0.0,
     km: 0,
     km_cost: 0.50
-  }
+  }), [projectId, defaultCostCenterId])
 
   const [formData, setFormData] = useState(initialData)
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
@@ -72,7 +73,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
       setSelectedEmployeeIds([])
       setIsChanged(false)
     }
-  }, [labor, isOpen, project])
+  }, [labor, isOpen, project, defaultCostCenterId, initialData])
 
   const toggleTravel = () => {
     const newIsTravel = !formData.is_travel
@@ -94,9 +95,9 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
       
       if (field === 'vehicle') {
         if (value && value !== 'Nessuno') {
-          // Inizializza km e km_cost con i valori di default della commessa se non sono già impostati
+          const matchedVeh = vehiclesData.find(v => v.name === value)
+          const kmCostVal = matchedVeh ? matchedVeh.km_cost : (project?.km_cost || 0.50)
           const kmVal = prev.km || (project?.distance || 0)
-          const kmCostVal = prev.km_cost || (project?.km_cost || 0.50)
           newData = {
             ...newData,
             km: kmVal,
@@ -168,9 +169,13 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
         setPhaseOptions(res.phases_labor.map(p => ({ id: p, label: p })))
       }
       if (res.vehicles && res.vehicles.length > 0) {
+        const mapped = res.vehicles.map(v => 
+          typeof v === 'string' ? { name: v, km_cost: 0.50 } : v
+        )
+        setVehiclesData(mapped)
         setVehicleOptions([
           { id: 'Nessuno', label: 'Nessun Mezzo' },
-          ...res.vehicles.map(v => ({ id: v, label: v }))
+          ...mapped.map(v => ({ id: v.name, label: v.name }))
         ])
       }
     }).catch(console.error)
@@ -184,17 +189,26 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
       const currentSettings = await invoke('get_global_settings')
       const vehicles = currentSettings.vehicles || []
 
-      if (!vehicles.includes(trimmed)) {
-        const updatedVehicles = [...vehicles, trimmed]
+      const exists = vehicles.some(v => 
+        (typeof v === 'string' ? v.toLowerCase() : v.name.toLowerCase()) === trimmed.toLowerCase()
+      )
+      if (!exists) {
+        const newVeh = { name: trimmed, km_cost: 0.50 }
+        const updatedVehicles = [...vehicles, newVeh]
         const newSettings = {
           ...currentSettings,
           vehicles: updatedVehicles
         }
 
         await invoke('save_global_settings', { settings: newSettings })
+        
+        const mapped = updatedVehicles.map(v => 
+          typeof v === 'string' ? { name: v, km_cost: 0.50 } : v
+        )
+        setVehiclesData(mapped)
         setVehicleOptions([
           { id: 'Nessuno', label: 'Nessun Mezzo' },
-          ...updatedVehicles.map(v => ({ id: v, label: v }))
+          ...mapped.map(v => ({ id: v.name, label: v.name }))
         ])
       }
 
@@ -398,24 +412,38 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
 
         {/* Analitica: Centro di Costo e Ambito */}
         <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
-            <Select 
-              options={ccOptions}
-              value={formData.cost_center_id}
-              onChange={(val) => handleChange('cost_center_id', val)}
-              icon={Target}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
-            <PhaseSelector 
-              phases={phaseOptions}
-              value={formData.phase}
-              onChange={(val) => handleChange('phase', val)}
-              onAddNew={handleAddNewPhase}
-            />
-          </div>
+          {!defaultCostCenterId ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                <Select 
+                  options={ccOptions}
+                  value={formData.cost_center_id}
+                  onChange={(val) => handleChange('cost_center_id', val)}
+                  icon={Target}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
+                <PhaseSelector 
+                  phases={phaseOptions}
+                  value={formData.phase}
+                  onChange={(val) => handleChange('phase', val)}
+                  onAddNew={handleAddNewPhase}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="col-span-2 space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
+              <PhaseSelector 
+                phases={phaseOptions}
+                value={formData.phase}
+                onChange={(val) => handleChange('phase', val)}
+                onAddNew={handleAddNewPhase}
+              />
+            </div>
+          )}
         </div>
 
         {/* Quantità e Costi */}

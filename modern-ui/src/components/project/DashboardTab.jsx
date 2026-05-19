@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Euro, Receipt, TrendingUp, BarChart3, AlertCircle } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import Card from '../ui/Card'
 import StatCard from '../ui/StatCard'
 
-const DashboardTab = ({ stats, project }) => {
+const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [], isCostCenter = false }) => {
   // Brand Color
   const brandColor = 'accent';
 
@@ -22,6 +22,45 @@ const DashboardTab = ({ stats, project }) => {
   const totalValue = stats.costoTotale + Math.max(0, stats.utile);
   const utilePercent = totalValue > 0 ? Math.round((Math.max(0, stats.utile) / totalValue) * 100) : 0;
   const costoPercent = totalValue > 0 ? Math.round((stats.costoTotale / totalValue) * 100) : 0;
+
+  const phaseData = useMemo(() => {
+    if (!isCostCenter) return []
+    const phases = {}
+
+    const getOrCreatePhase = (name) => {
+      const normalizedName = name ? name.trim() : 'Non Specificato'
+      if (!phases[normalizedName]) {
+        phases[normalizedName] = {
+          name: normalizedName,
+          laborCost: 0,
+          materialCost: 0,
+          expenseCost: 0,
+          totalCost: 0
+        }
+      }
+      return phases[normalizedName]
+    }
+
+    labor.forEach(l => {
+      const phase = getOrCreatePhase(l.phase)
+      phase.laborCost += (l.hours * l.hourly_cost) + (l.travel_cost || 0)
+    })
+
+    materials.forEach(m => {
+      const phase = getOrCreatePhase(m.phase)
+      phase.materialCost += m.quantity * m.unit_price
+    })
+
+    expenses.forEach(ex => {
+      const phase = getOrCreatePhase(ex.phase)
+      phase.expenseCost += ex.amount
+    })
+
+    return Object.values(phases).map(p => {
+      p.totalCost = p.laborCost + p.materialCost + p.expenseCost
+      return p
+    }).sort((a, b) => b.totalCost - a.totalCost)
+  }, [isCostCenter, labor, materials, expenses])
 
   return (
     <div className="space-y-10">
@@ -163,6 +202,69 @@ const DashboardTab = ({ stats, project }) => {
           </div>
         </Card>
       </div>
+
+      {isCostCenter && (
+        <Card className="p-8 hover:bg-white transition-all duration-500">
+          <div className="flex items-center gap-3 mb-6">
+            <div className={`w-1.5 h-6 bg-accent rounded-full`}></div>
+            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Distribuzione Costi per Fase</span>
+          </div>
+          
+          {phaseData.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1 space-y-4">
+                <h4 className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 mb-4">Percentuale su Costo Totale</h4>
+                {phaseData.map((item, idx) => {
+                  const perc = stats.costoTotale > 0 ? (item.totalCost / stats.costoTotale) * 100 : 0
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-slate-700">
+                        <span className="truncate max-w-[150px] uppercase text-[0.65rem]">{item.name}</span>
+                        <span>{perc.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-accent h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${perc}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              <div className="lg:col-span-2 overflow-x-auto border border-slate-100 rounded-2xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="py-3 px-4 font-black uppercase tracking-widest text-slate-400">Fase</th>
+                      <th className="py-3 px-4 font-black uppercase tracking-widest text-slate-400 text-right">Manodopera</th>
+                      <th className="py-3 px-4 font-black uppercase tracking-widest text-slate-400 text-right">Materiali</th>
+                      <th className="py-3 px-4 font-black uppercase tracking-widest text-slate-400 text-right">Spese</th>
+                      <th className="py-3 px-4 font-black uppercase tracking-widest text-slate-400 text-right">Costo Totale</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                    {phaseData.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-4 font-black uppercase text-slate-800">{item.name}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.laborCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.materialCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.expenseCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-900 font-black">€ {item.totalCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-slate-400 text-[0.65rem] font-black uppercase tracking-widest">
+              Nessuna attività (ore, materiali, spese) registrata per questo centro di costo.
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

@@ -5,128 +5,119 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Plus, 
-  X,
-  Truck,
-  Settings
+  Search, 
+  Euro, 
+  Trash2, 
+  Edit3, 
+  Truck
 } from 'lucide-react'
-
-import Card from '../ui/Card'
-
-const ResourceListManager = ({ input, setInput, addItem, removeItem, vehicles }) => (
-  <Card hoverEffect={true} className="p-0 overflow-hidden">
-    <div className="p-10 space-y-8">
-      <div className="flex items-center gap-6">
-        <div className="p-5 bg-slate-50 text-accent rounded-[2rem] shadow-sm">
-          <Truck size={32} />
-        </div>
-        <div>
-          <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Parco Mezzi</h3>
-          <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Gestione dei mezzi a disposizione per le trasferte</p>
-        </div>
-      </div>
-
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-          <input 
-            type="text" 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addItem()}
-            placeholder="Inserisci nome mezzo (es. Furgone Lely, Fiat Doblò...)"
-            className="w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-          />
-        </div>
-        <button 
-          onClick={addItem}
-          className="px-8 bg-accent hover:bg-accent-hover text-white rounded-2xl font-black text-[0.7rem] uppercase tracking-widest transition-all shadow-lg shadow-accent/20 active:scale-95"
-        >
-          Aggiungi Mezzo
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-8 border-t border-slate-50">
-        {vehicles.length > 0 ? vehicles.map((item, idx) => (
-          <div 
-            key={idx} 
-            className="flex items-center justify-between bg-slate-50 p-5 rounded-3xl group hover:bg-red-50 transition-all animate-fade-in"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-300 group-hover:text-accent transition-colors shadow-sm">
-                <Truck size={18} />
-              </div>
-              <span className="text-[0.8rem] font-black uppercase tracking-widest text-slate-600 group-hover:text-accent">{item}</span>
-            </div>
-            <button 
-              onClick={() => removeItem(item)}
-              className="p-2 text-slate-300 hover:text-accent transition-all"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        )) : (
-          <div className="col-span-full py-12 text-center">
-            <p className="text-sm font-bold text-slate-300 uppercase tracking-[0.2em] italic">Nessun mezzo registrato nel sistema</p>
-          </div>
-        )}
-      </div>
-    </div>
-  </Card>
-)
+import EntityCard from '../ui/EntityCard'
+import ConfirmModal from '../ui/ConfirmModal'
+import DrawerShell from '../ui/DrawerShell'
 
 const ResourcesSettings = () => {
+  const [allGlobalSettings, setAllGlobalSettings] = useState({})
   const [settings, setSettings] = useState({
     vehicles: []
   })
-  const [input, setInput] = useState('')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState({ type: '', message: '' })
+  
+  // Drawer states
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState(null)
+  
+  // Delete confirm states
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [vehicleToDelete, setVehicleToDelete] = useState(null)
+
+  const loadSettings = async () => {
+    setLoading(true)
+    try {
+      const res = await invoke('get_global_settings')
+      setAllGlobalSettings(res)
+      
+      // Map elements. If a vehicle is a string, convert to { name: string, km_cost: 0.50 }
+      const mappedVehicles = (res.vehicles || []).map(v => 
+        typeof v === 'string' ? { name: v, km_cost: 0.50 } : v
+      )
+      setSettings({
+        vehicles: mappedVehicles
+      })
+    } catch (err) {
+      console.error("Errore caricamento mezzi:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    invoke('get_global_settings')
-      .then(res => {
-        setSettings({
-          vehicles: res.vehicles || []
-        })
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error("Errore caricamento mezzi:", err)
-        setLoading(false)
-      })
+    loadSettings()
   }, [])
 
-  const saveSettings = async (newSettings) => {
+  const filteredVehicles = settings.vehicles.filter(v => 
+    v.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    const formData = new FormData(e.target)
+    const vehName = formData.get('name').trim()
+    const kmCost = parseFloat(formData.get('cost')) || 0.0
+
+    if (!vehName) return
+
+    let updatedVehicles;
+    if (selectedVehicle) {
+      // Modifica di un furgone esistente
+      updatedVehicles = settings.vehicles.map(v => 
+        v.name === selectedVehicle.name ? { name: vehName, km_cost: kmCost } : v
+      )
+    } else {
+      // Nuovo furgone
+      if (settings.vehicles.some(v => v.name.toLowerCase() === vehName.toLowerCase())) {
+        alert("Un mezzo con questo nome esiste già.")
+        return
+      }
+      updatedVehicles = [...settings.vehicles, { name: vehName, km_cost: kmCost }]
+    }
+
+    const newSettings = {
+      ...allGlobalSettings,
+      vehicles: updatedVehicles
+    }
+
     try {
       await invoke('save_global_settings', { settings: newSettings })
+      setAllGlobalSettings(newSettings)
+      setSettings({ vehicles: updatedVehicles })
+      setIsDrawerOpen(false)
       setStatus({ type: 'success', message: 'Parco mezzi aggiornato' })
       setTimeout(() => setStatus({ type: '', message: '' }), 2000)
     } catch (err) {
-      setStatus({ type: 'error', message: 'Errore nel salvataggio automatico' })
+      alert("Errore salvataggio: " + err)
     }
   }
 
-  const addItem = () => {
-    const value = input.trim()
-    if (!value) return
-    if (settings.vehicles.includes(value)) return
-
-    const newSettings = {
-      ...settings,
-      vehicles: [...settings.vehicles, value]
+  const handleDelete = async () => {
+    if (vehicleToDelete) {
+      const updatedVehicles = settings.vehicles.filter(v => v.name !== vehicleToDelete)
+      const newSettings = {
+        ...allGlobalSettings,
+        vehicles: updatedVehicles
+      }
+      try {
+        await invoke('save_global_settings', { settings: newSettings })
+        setAllGlobalSettings(newSettings)
+        setSettings({ vehicles: updatedVehicles })
+        setIsConfirmOpen(false)
+        setStatus({ type: 'success', message: 'Mezzo rimosso' })
+        setTimeout(() => setStatus({ type: '', message: '' }), 2000)
+      } catch (err) {
+        alert("Errore rimozione: " + err)
+      }
     }
-    setSettings(newSettings)
-    setInput('')
-    saveSettings(newSettings)
-  }
-
-  const removeItem = (value) => {
-    const newSettings = {
-      ...settings,
-      vehicles: settings.vehicles.filter(item => item !== value)
-    }
-    setSettings(newSettings)
-    saveSettings(newSettings)
   }
 
   if (loading) {
@@ -138,7 +129,7 @@ const ResourcesSettings = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-premium-in">
+    <div className="space-y-8 animate-premium-in">
       {status.message && (
         <div className={`fixed bottom-8 right-8 p-4 rounded-2xl flex items-center gap-4 shadow-2xl z-50 animate-premium-in ${
           status.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-50 text-red-600 border border-red-100'
@@ -148,12 +139,103 @@ const ResourcesSettings = () => {
         </div>
       )}
 
-      <ResourceListManager 
-        input={input}
-        setInput={setInput}
-        addItem={addItem}
-        removeItem={removeItem}
-        vehicles={settings.vehicles}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Parco Mezzi</h1>
+          <p className="text-[0.7rem] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">Gestione dei mezzi e costi chilometrici</p>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-accent transition-colors" size={18} />
+            <input 
+              type="text" 
+              placeholder="Cerca mezzo..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl py-3 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all w-64 shadow-sm"
+            />
+          </div>
+          
+          <button 
+            onClick={() => { setSelectedVehicle(null); setIsDrawerOpen(true); }}
+            className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-accent/30 transition-all hover:-translate-y-1"
+          >
+            <Plus size={18} />
+            Aggiungi Mezzo
+          </button>
+        </div>
+      </div>
+
+      {filteredVehicles.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {filteredVehicles.map(veh => (
+            <EntityCard 
+              key={veh.name}
+              icon={<Truck size={24} />}
+              title={veh.name}
+              subtitle={`Costo al km: € ${veh.km_cost.toFixed(2)} / km`}
+              onEdit={() => { setSelectedVehicle(veh); setIsDrawerOpen(true); }}
+              onDelete={() => { setVehicleToDelete(veh.name); setIsConfirmOpen(true); }}
+              footerItems={[
+                { icon: <Euro size={12} />, label: `€ ${veh.km_cost.toFixed(2)} / km` }
+              ]}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="glass-panel p-20 text-center rounded-[3.5rem] border-2 border-dashed border-slate-200">
+          <div className="w-16 h-16 bg-slate-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300">
+            <Truck size={32} />
+          </div>
+          <h3 className="text-lg font-black text-slate-400 uppercase tracking-widest">Nessun mezzo registrato</h3>
+          <p className="text-slate-400 text-sm mt-2">Aggiungi i tuoi mezzi per tracciare i costi chilometrici di trasferta.</p>
+        </div>
+      )}
+
+      <DrawerShell 
+        isOpen={isDrawerOpen} 
+        onClose={() => setIsDrawerOpen(false)} 
+        title={selectedVehicle ? "Modifica Mezzo" : "Nuovo Mezzo"}
+      >
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Nome Mezzo / Furgone</label>
+            <input 
+              required
+              name="name"
+              defaultValue={selectedVehicle?.name || ''}
+              onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Chilometrico Standard (€/km)</label>
+            <input 
+              required
+              type="number"
+              step="0.01"
+              name="cost"
+              defaultValue={selectedVehicle?.km_cost !== undefined ? selectedVehicle.km_cost : 0.50}
+              onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
+            />
+          </div>
+          <button 
+            type="submit"
+            className="w-full py-4 bg-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-accent/20 hover:bg-accent/90 transition-all mt-4"
+          >
+            {selectedVehicle ? 'Salva Modifiche' : 'Aggiungi Parco Mezzi'}
+          </button>
+        </form>
+      </DrawerShell>
+
+      <ConfirmModal 
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleDelete}
+        title="Rimuovi Mezzo"
+        message="Sei sicuro di voler rimuovere questo mezzo dal parco mezzi?"
       />
     </div>
   )

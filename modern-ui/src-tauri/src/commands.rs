@@ -44,6 +44,7 @@ pub struct Project {
     pub utile_previsto: Option<f64>,
     pub distance: Option<i32>,
     pub km_cost: Option<f64>,
+    pub address: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -126,6 +127,8 @@ pub fn get_stats() -> serde_json::Value {
                 "invoices_count": 0,
                 "clients_count": 0,
                 "total_pending": 0.0,
+                "utile_previsto": 0.0,
+                "utile_effettivo": 0.0,
                 "chart_data": []
             });
         }
@@ -184,6 +187,41 @@ pub fn get_stats() -> serde_json::Value {
     ).unwrap_or(0.0);
 
     let total_pending = total_materials + total_cost_centers + total_labor + total_expenses + total_projects_travel;
+
+    // Calcoliamo il valore totale dei lavori (con markup) per determinare l'utile previsto
+    let valore_materials: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(quantity * unit_price * (1.0 + markup)), 0.0) FROM materials",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let valore_cost_centers: f64 = conn.query_row(
+        "SELECT COALESCE(SUM((base_cost * (1.0 + markup)) + shipping + install_fee), 0.0) FROM cost_centers",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let valore_labor: f64 = conn.query_row(
+        "SELECT COALESCE(SUM((hours * hourly_cost + travel_cost) * (1.0 + markup)), 0.0) FROM labor",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let valore_expenses: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount * (1.0 + markup)), 0.0) FROM expenses",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let valore_projects_travel: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(distance * km_cost), 0.0) FROM projects",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    let total_valore_lavori = valore_materials + valore_cost_centers + valore_labor + valore_expenses + valore_projects_travel;
+    let utile_previsto = total_valore_lavori - total_pending;
+    let utile_effettivo = total_revenue - total_pending;
 
     // 5. Monthly Chart Data (Costi per mese dell'anno corrente)
     let mut chart_data = vec![
@@ -256,6 +294,8 @@ pub fn get_stats() -> serde_json::Value {
         "invoices_count": invoices_count,
         "clients_count": clients_count,
         "total_pending": total_pending,
+        "utile_previsto": utile_previsto,
+        "utile_effettivo": utile_effettivo,
         "chart_data": chart_data
     })
 }
@@ -365,7 +405,8 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
                 COALESCE(p.distance * p.km_cost, 0.0)
             ) as valore_lavori,
             p.distance,
-            p.km_cost
+            p.km_cost,
+            p.address
         FROM projects p 
         LEFT JOIN clients c ON p.client_id = c.id 
         ORDER BY p.id DESC
@@ -392,6 +433,7 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             utile_previsto: Some(utile_previsto),
             distance: row.get(11)?,
             km_cost: row.get(12)?,
+            address: row.get(13)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -410,10 +452,10 @@ pub fn save_project(project: Project) -> Result<(), String> {
     
     if let Some(id) = project.id {
         conn.execute(
-            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=?, distance=?, km_cost=? WHERE id=?",
+            "UPDATE projects SET client_id=?, name=?, description=?, status=?, start_date=?, end_date=?, budget=?, distance=?, km_cost=?, address=? WHERE id=?",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget, dist, k_cost, id
+                project.start_date, project.end_date, project.budget, dist, k_cost, project.address, id
             ),
         ).map_err(|e| e.to_string())?;
 
@@ -425,10 +467,10 @@ pub fn save_project(project: Project) -> Result<(), String> {
         ).map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance, km_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance, km_cost, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.client_id, project.name, project.description, project.status, 
-                project.start_date, project.end_date, project.budget, dist, k_cost
+                project.start_date, project.end_date, project.budget, dist, k_cost, project.address
             ),
         ).map_err(|e| e.to_string())?;
     }

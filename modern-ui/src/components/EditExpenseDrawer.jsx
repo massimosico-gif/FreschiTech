@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { X, Calendar, FileText, Euro, Target, Layers, Truck, Activity, Users } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
 import Select from './ui/Select'
@@ -6,23 +6,23 @@ import MultiSelect from './ui/MultiSelect'
 import DatePicker from './ui/DatePicker'
 import { invoke } from '@tauri-apps/api/core'
 
-const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, onSave }) => {
+const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, onSave, defaultCostCenterId = null }) => {
   // Brand Configuration (Centralized Color)
   const brandColor = 'accent'; // Lely Red
 
   const [employees, setEmployees] = useState([])
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
 
-  const initialData = {
+  const initialData = useMemo(() => ({
     project_id: Number(projectId),
-    cost_center_id: null,
+    cost_center_id: defaultCostCenterId,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
     description: '',
     supplier: '',
     amount: 0,
     markup: 0.00
-  }
+  }), [projectId, defaultCostCenterId])
 
   const [formData, setFormData] = useState(initialData)
   const [isChanged, setIsChanged] = useState(false)
@@ -49,7 +49,7 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
       setSelectedEmployeeIds([])
       setIsChanged(false)
     }
-  }, [expense, isOpen])
+  }, [expense, isOpen, defaultCostCenterId, initialData])
 
   const handleChange = (field, value) => {
     setFormData(prev => {
@@ -174,29 +174,48 @@ const EditExpenseDrawer = ({ isOpen, onClose, expense, projectId, costCenters, o
           </div>
 
           <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
-              <div className="relative group">
-                <Truck className={`absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-${brandColor} transition-colors`} size={18} />
-                <input 
-                  type="text"
-                  value={formData.supplier}
-                  onChange={(e) => handleChange('supplier', e.target.value)}
-                  placeholder="Nome locale o esercente..."
-                  onFocus={(e) => setTimeout(() => e.target.select(), 0)}
-                  className={`w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-${brandColor}/20 transition-all`}
-                />
+            {!defaultCostCenterId ? (
+              <>
+                <div className="space-y-2">
+                  <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
+                  <div className="relative group">
+                    <Truck className={`absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-${brandColor} transition-colors`} size={18} />
+                    <input 
+                      type="text"
+                      value={formData.supplier}
+                      onChange={(e) => handleChange('supplier', e.target.value)}
+                      placeholder="Nome locale o esercente..."
+                      onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+                      className={`w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-${brandColor}/20 transition-all`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                  <Select 
+                    options={ccOptions}
+                    value={formData.cost_center_id}
+                    onChange={(val) => handleChange('cost_center_id', val)}
+                    icon={Target}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="col-span-2 space-y-2">
+                <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
+                <div className="relative group">
+                  <Truck className={`absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-${brandColor} transition-colors`} size={18} />
+                  <input 
+                    type="text"
+                    value={formData.supplier}
+                    onChange={(e) => handleChange('supplier', e.target.value)}
+                    placeholder="Nome locale o esercente..."
+                    onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+                    className={`w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-${brandColor}/20 transition-all`}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
-              <Select 
-                options={ccOptions}
-                value={formData.cost_center_id}
-                onChange={(val) => handleChange('cost_center_id', val)}
-                icon={Target}
-              />
-            </div>
+            )}
           </div>
         </section>
 

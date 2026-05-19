@@ -18,11 +18,11 @@ import Select from './ui/Select'
 import DatePicker from './ui/DatePicker'
 import PhaseSelector from './ui/PhaseSelector'
 
-const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters, onSave }) => {
+const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters, onSave, defaultCostCenterId = null }) => {
   const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
     project_id: Number(projectId),
-    cost_center_id: null,
+    cost_center_id: defaultCostCenterId,
     phase: 'Generale',
     date: new Date().toISOString().split('T')[0],
     code: '',
@@ -96,7 +96,7 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
       } else {
         data = {
           project_id: Number(projectId),
-          cost_center_id: null,
+          cost_center_id: defaultCostCenterId,
           phase: 'Generale',
           date: new Date().toISOString().split('T')[0],
           code: '',
@@ -111,7 +111,7 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
       setFormData(data)
       setInitialData(JSON.stringify(data))
     }
-  }, [isOpen, material, projectId])
+  }, [isOpen, material, projectId, defaultCostCenterId])
 
   const isDirty = useMemo(() => {
     return JSON.stringify(formData) !== initialData
@@ -187,15 +187,17 @@ const EditMaterialDrawer = ({ isOpen, onClose, material, projectId, costCenters,
             <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Classificazione</span>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Centro di Costo</label>
-            <Select 
-              options={ccOptions}
-              value={formData.cost_center_id}
-              onChange={(val) => setFormData(p => ({...p, cost_center_id: val}))}
-              icon={Target}
-            />
-          </div>
+          {!defaultCostCenterId && (
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Centro di Costo</label>
+              <Select 
+                options={ccOptions}
+                value={formData.cost_center_id}
+                onChange={(val) => setFormData(p => ({...p, cost_center_id: val}))}
+                icon={Target}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">

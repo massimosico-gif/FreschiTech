@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import Select from '../ui/Select'
 
-const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
+const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, defaultCostCenterId = null }) => {
   // Sorting
   const [sort, setSort] = useState({ field: 'date', direction: 'desc' })
 
@@ -26,7 +26,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
   const initialFilters = {
     search: '',
     phase: 'all',
-    cc: 'all'
+    cc: defaultCostCenterId ? String(defaultCostCenterId) : 'all'
   }
   const [filters, setFilters] = useState(initialFilters)
 
@@ -150,16 +150,18 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
           />
         </div>
 
-        <div className="w-full lg:w-64 space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
-          <Select 
-            options={ccOptions}
-            value={filters.cc}
-            onChange={(val) => setFilters(p => ({...p, cc: val}))}
-            icon={Target}
-            className="bg-white/50"
-          />
-        </div>
+        {!defaultCostCenterId && (
+          <div className="w-full lg:w-64 space-y-2">
+            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
+            <Select 
+              options={ccOptions}
+              value={filters.cc}
+              onChange={(val) => setFilters(p => ({...p, cc: val}))}
+              icon={Target}
+              className="bg-white/50"
+            />
+          </div>
+        )}
 
         <button 
           onClick={() => setFilters(initialFilters)}
@@ -189,9 +191,11 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
                 <th onClick={() => handleSort('supplier')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Fornitore <SortIcon field="supplier" /></div>
                 </th>
-                <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
-                  <div className="flex items-center gap-2">Centro di Costo <SortIcon field="cost_center" /></div>
-                </th>
+                {!defaultCostCenterId && (
+                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                    <div className="flex items-center gap-2">Centro di Costo <SortIcon field="cost_center" /></div>
+                  </th>
+                )}
                 <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Ambito <SortIcon field="phase" /></div>
                 </th>
@@ -228,16 +232,18 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
                       <span className="text-xs font-bold">{mat.supplier || '-'}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${mat.cost_center_id ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-300'}`}>
-                        <Target size={14} />
+                  {!defaultCostCenterId && (
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${mat.cost_center_id ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-300'}`}>
+                          <Target size={14} />
+                        </div>
+                        <span className={`text-[0.65rem] font-black uppercase tracking-tight ${mat.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
+                          {mat.cost_center_name || 'Generale'}
+                        </span>
                       </div>
-                      <span className={`text-[0.65rem] font-black uppercase tracking-tight ${mat.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
-                        {mat.cost_center_name || 'Generale'}
-                      </span>
-                    </div>
-                  </td>
+                    </td>
+                  )}
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
@@ -289,7 +295,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete }) => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="10" className="px-8 py-20 text-center">
+                  <td colSpan={defaultCostCenterId ? "9" : "10"} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center gap-4">
                       <div className="p-6 bg-slate-50 rounded-3xl text-slate-200">
                         <Package size={48} />

@@ -56,10 +56,14 @@ pub fn init_db() -> Result<()> {
             budget REAL DEFAULT 0.0,
             distance INTEGER DEFAULT 0,
             km_cost REAL DEFAULT 0.50,
+            address TEXT,
             FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
         )",
         [],
     )?;
+
+    // Migrazione per database esistenti
+    let _ = conn.execute("ALTER TABLE projects ADD COLUMN address TEXT", []);
 
     // Tabella Centri di Costo (Cost Centers)
     conn.execute(

@@ -38,27 +38,29 @@ const ProjectHeader = ({ project, client, activeTab, setActiveTab, tabs, onBack 
       </div>
 
       {/* Tab Navigation */}
-      <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
-              activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <tab.icon size={14} />
-            {tab.label}
-            {activeTab === tab.id && (
-              <motion.div
-                layoutId="activeTab"
-                className="absolute inset-0 bg-accent rounded-xl -z-10 shadow-lg shadow-accent/20"
-                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-              />
-            )}
-          </button>
-        ))}
-      </div>
+      {tabs && tabs.length > 0 && (
+        <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+                activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+              {activeTab === tab.id && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-accent rounded-xl -z-10 shadow-lg shadow-accent/20"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

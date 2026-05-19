@@ -14,7 +14,9 @@ import {
   TrendingUp, 
   Users, 
   FileText, 
-  CreditCard 
+  CreditCard,
+  BarChart3,
+  Euro
 } from 'lucide-react'
 import { formatNumber } from '../utils/format'
 
@@ -31,10 +33,12 @@ const Dashboard = () => {
         setData(resData.chart_data || [])
         
         setStats([
-          { label: 'Fatturato Preventivato', value: `€ ${formatNumber(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
+          { label: 'Totale Preventivato', value: `€ ${formatNumber(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
           { label: 'Progetti Attivi', value: resData.invoices_count.toString(), icon: <FileText size={24} />, color: '#3b82f6' },
           { label: 'Clienti Lely', value: resData.clients_count.toString(), icon: <Users size={24} />, color: '#8b5cf6' },
           { label: 'Costi Totali Cantieri', value: `€ ${formatNumber(resData.total_pending)}`, icon: <CreditCard size={24} />, color: '#f43f5e' },
+          { label: 'Utile Previsto', value: `€ ${formatNumber(resData.utile_previsto)}`, icon: <BarChart3 size={24} />, color: '#10b981' },
+          { label: 'Utile Effettivo (Rispetto al budget)', value: `€ ${formatNumber(resData.utile_effettivo)}`, icon: <Euro size={24} />, color: '#06b6d4' },
         ])
         setLoading(false)
       })
@@ -49,7 +53,7 @@ const Dashboard = () => {
   return (
     <div className="space-y-8 animate-premium-in">
       {/* Griglia Statistiche */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {stats.map((stat, idx) => (
           <div 
             key={idx} 

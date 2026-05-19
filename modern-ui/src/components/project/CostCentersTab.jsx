@@ -4,7 +4,7 @@ import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity } fr
 import EntityCard from '../ui/EntityCard'
 import Select from '../ui/Select'
 
-const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete }) => {
+const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) => {
   const initialFilters = {
     search: '',
     category: 'all'
@@ -115,6 +115,7 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete }) => {
               ]}
               onEdit={() => onEdit(cc)}
               onDelete={() => onDelete(cc.id)}
+              onClick={() => onClickCard && onClickCard(cc.id)}
             />
           ))}
         </div>

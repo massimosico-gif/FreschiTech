@@ -1,19 +1,21 @@
 import React, { useState } from 'react'
-import { Mail, Percent, Database, RefreshCw, Briefcase, CreditCard, Building2 } from 'lucide-react'
+import { Mail, Percent, Database, RefreshCw, Briefcase, CreditCard, Building2, HardHat } from 'lucide-react'
 
 
 import CompanySettings from './settings/CompanySettings'
 import CategoriesSettings from './settings/CategoriesSettings'
 import ResourcesSettings from './settings/ResourcesSettings'
 import UpdaterSettings from './settings/UpdaterSettings'
+import Team from './Team'
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('azienda')
 
   const tabs = [
     { id: 'azienda', label: 'Azienda', icon: <Building2 size={16} /> },
-    { id: 'categorie', label: 'Categorie & Fasi', icon: <Database size={16} /> },
+    { id: 'squadra', label: 'Squadra', icon: <HardHat size={16} /> },
     { id: 'mezzi', label: 'Mezzi & Risorse', icon: <Briefcase size={16} /> },
+    { id: 'categorie', label: 'Categorie & Fasi', icon: <Database size={16} /> },
     { id: 'updates', label: 'Aggiornamenti', icon: <RefreshCw size={16} /> }
   ]
 
@@ -57,8 +59,9 @@ const Settings = () => {
 
       <div className="grid grid-cols-1 gap-8">
         {activeTab === 'azienda' && <CompanySettings />}
-        {activeTab === 'categorie' && <CategoriesSettings />}
+        {activeTab === 'squadra' && <Team />}
         {activeTab === 'mezzi' && <ResourcesSettings />}
+        {activeTab === 'categorie' && <CategoriesSettings />}
         {activeTab === 'updates' && <UpdaterSettings />}
       </div>
     </div>

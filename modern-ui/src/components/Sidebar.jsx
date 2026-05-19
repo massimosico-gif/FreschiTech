@@ -3,8 +3,7 @@ import {
   LayoutDashboard, 
   Users,
   Briefcase,
-  Settings,
-  HardHat
+  Settings
 } from 'lucide-react'
 
 const Sidebar = ({ 
@@ -21,7 +20,6 @@ const Sidebar = ({
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { id: 'clients', label: 'Clienti', icon: <Users size={18} /> },
-    { id: 'team', label: 'Squadra', icon: <HardHat size={18} /> },
     { id: 'projects', label: 'Commesse', icon: <Briefcase size={18} /> },
     { id: 'settings', label: 'Impostazioni', icon: <Settings size={18} /> },
   ]
