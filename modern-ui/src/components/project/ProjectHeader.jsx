@@ -20,14 +20,14 @@ const ProjectHeader = ({ project, client, activeTab, setActiveTab, tabs, onBack 
           </div>
           <h1 className="text-4xl font-black text-slate-800 tracking-tighter leading-none">{project.name}</h1>
           
-          <div className="flex items-center gap-6 mt-4">
+          <div className="flex flex-wrap items-center gap-6 mt-4">
             <div className="flex items-center gap-2 text-slate-500">
               <User size={16} className="text-accent" />
               <span className="text-sm font-bold">{client?.name}</span>
             </div>
             <div className="flex items-center gap-2 text-slate-500">
               <MapPin size={16} className="text-accent" />
-              <span className="text-sm font-bold">{client?.city}</span>
+              <span className="text-sm font-bold">{project?.address || 'Nessun indirizzo'}</span>
             </div>
             <div className="flex items-center gap-2 text-slate-500">
               <Clock size={16} className="text-accent" />
