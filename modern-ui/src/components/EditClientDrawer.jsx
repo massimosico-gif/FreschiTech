@@ -103,6 +103,11 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     }
   }, [isOpen, client])
 
+  const isNameInvalid = !formData.name || !formData.name.trim();
+  const hasValidationErrors = Object.values(errors).some(err => !!err);
+  const isNotDirty = client && client.id && !isDirty;
+  const isSaveDisabled = isNameInvalid || hasValidationErrors || isNotDirty;
+
   return (
     <DrawerShell
       isOpen={isOpen}
@@ -122,9 +127,9 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           <button 
             type="button" 
             onClick={handleSaveInternal} 
-            disabled={!isDirty && client && client.id}
+            disabled={isSaveDisabled}
             className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
-              (!client || !client.id || isDirty) 
+              !isSaveDisabled
               ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
               : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
             }`}
