@@ -332,6 +332,10 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   }
 
   const isDirty = initialData && JSON.stringify(formData) !== JSON.stringify(initialData)
+  const isNameMissing = !formData.name || !formData.name.trim()
+  const isClientMissing = !formData.client_id
+  const isNotDirtyEdit = job && !isDirty
+  const isSaveDisabled = isNameMissing || isClientMissing || isNotDirtyEdit
   const needsCalculation = formData.address && formData.address.trim().toLowerCase() !== lastCalculatedAddress.trim().toLowerCase()
 
   useEffect(() => {
@@ -394,9 +398,9 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
             <button 
               type="button" 
               onClick={handleSaveInternal} 
-              disabled={!isDirty && job}
+              disabled={isSaveDisabled}
               className={`flex-1 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${
-                (!job || isDirty) 
+                !isSaveDisabled
                 ? 'bg-accent text-white hover:bg-accent/90 shadow-accent/20' 
                 : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
               }`}
