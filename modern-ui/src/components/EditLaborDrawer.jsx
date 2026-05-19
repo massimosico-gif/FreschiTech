@@ -33,6 +33,12 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
   const [isChanged, setIsChanged] = useState(false)
 
+  const isOperatorMissing = labor 
+    ? (!formData.operator || !formData.operator.trim())
+    : selectedEmployeeIds.length === 0;
+
+  const isSaveDisabled = isOperatorMissing || (labor && !isChanged);
+
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
@@ -293,7 +299,7 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
         <div className="grid grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">
-              {labor ? 'Operatore' : 'Operatori coinvolti'}
+              {labor ? 'Operatore *' : 'Operatori coinvolti *'}
             </label>
             {labor ? (
               <div className="relative group">
@@ -499,8 +505,20 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
 
         {/* Riepilogo Economico */}
         {(() => {
-          const numPeople = labor ? 1 : Math.max(1, selectedEmployeeIds.length);
-          const laborCost = numPeople * formData.hours * formData.hourly_cost;
+          let laborCost = 0;
+          if (labor) {
+            laborCost = formData.hours * formData.hourly_cost;
+          } else {
+            if (selectedEmployeeIds.length > 0) {
+              selectedEmployeeIds.forEach(id => {
+                const emp = employees.find(e => e.id === id);
+                const rate = emp ? emp.default_hourly_cost : formData.hourly_cost;
+                laborCost += formData.hours * rate;
+              });
+            } else {
+              laborCost = formData.hours * formData.hourly_cost;
+            }
+          }
           const travelCost = formData.travel_cost || 0.0;
           const totalCost = laborCost + travelCost;
           const totalSale = totalCost * (1 + formData.markup);
@@ -517,6 +535,14 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
                 <p className="text-2xl font-black">
                   € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                 </p>
+                {!labor && selectedEmployeeIds.length > 1 && (
+                  <p className="text-[0.55rem] font-bold opacity-80 mt-1">
+                    Tariffe orarie: {selectedEmployeeIds.map(id => {
+                      const emp = employees.find(e => e.id === id);
+                      return emp ? `${emp.name} (${emp.default_hourly_cost}€/h)` : '';
+                    }).filter(Boolean).join(', ')}
+                  </p>
+                )}
                 {isVehicleActive && (
                   <p className="text-[0.55rem] font-bold opacity-80 mt-1">
                     (Mezzo: {formData.vehicle} | {formData.km || 0} km × {formData.km_cost || 0.50} €/km = € {travelCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
@@ -548,9 +574,9 @@ const EditLaborDrawer = ({ isOpen, onClose, labor, projectId, project, costCente
           </button>
           <button 
             type="submit"
-            disabled={(!isChanged && labor) || (!labor && selectedEmployeeIds.length === 0)}
+            disabled={isSaveDisabled}
             className={`flex-[2] py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest shadow-xl transition-all ${
-              ((!isChanged && labor) || (!labor && selectedEmployeeIds.length === 0))
+              isSaveDisabled
               ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
               : formData.is_travel 
                 ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200' 
