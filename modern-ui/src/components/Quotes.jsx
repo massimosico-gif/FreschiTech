@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { 
   FileText, 
@@ -76,6 +77,12 @@ const Quotes = () => {
   const [editingItemIndex, setEditingItemIndex] = useState(null)
   const [inlineItemFormData, setInlineItemFormData] = useState(null)
   const [deleteItemModal, setDeleteItemModal] = useState({ isOpen: false, itemIndex: null })
+  const [duplicateModal, setDuplicateModal] = useState({
+    isOpen: false,
+    newItem: null,
+    existingIndex: null,
+    existingItem: null
+  })
 
   // Status configuration for the select dropdown
   const statusOptions = [
@@ -193,18 +200,7 @@ const Quotes = () => {
     }
   }
 
-  // Push newRowData as a row item inside quoteItems
-  const handleAddRowToQuote = async () => {
-    if (!newRowData.description.trim()) return
-    const newItem = {
-      id: null,
-      code: newRowData.code || '',
-      description: newRowData.description.trim(),
-      unit: newRowData.unit || 'pz',
-      unit_price: newRowData.unit_price,
-      quantity: newRowData.quantity,
-      markup: newRowData.markup
-    }
+  const proceedAddRow = async (newItem) => {
     const updatedItems = [...quoteItems, newItem]
     setQuoteItems(updatedItems)
     
@@ -222,6 +218,114 @@ const Quotes = () => {
     setShowCatalogDropdown(false)
 
     await saveQuoteSilently(quoteMeta, updatedItems)
+  }
+
+  const handleDuplicateAdd = async () => {
+    const { newItem, existingIndex, existingItem } = duplicateModal
+    if (existingIndex === null || !existingItem || !newItem) return
+
+    const updatedItems = quoteItems.map((item, i) => {
+      if (i === existingIndex) {
+        return {
+          ...item,
+          quantity: item.quantity + newItem.quantity
+        }
+      }
+      return item
+    })
+    setQuoteItems(updatedItems)
+    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+    
+    // Reset addition data
+    setNewRowData({
+      code: '',
+      description: '',
+      unit: 'pz',
+      unit_price: 0,
+      quantity: 1,
+      markup: 0.25
+    })
+    setActiveField(null)
+    setCatalogSuggestions([])
+    setShowCatalogDropdown(false)
+
+    await saveQuoteSilently(quoteMeta, updatedItems)
+  }
+
+  const handleDuplicateOverwrite = async () => {
+    const { newItem, existingIndex, existingItem } = duplicateModal
+    if (existingIndex === null || !existingItem || !newItem) return
+
+    const updatedItems = quoteItems.map((item, i) => {
+      if (i === existingIndex) {
+        return {
+          ...item,
+          quantity: newItem.quantity,
+          unit_price: newItem.unit_price,
+          markup: newItem.markup
+        }
+      }
+      return item
+    })
+    setQuoteItems(updatedItems)
+    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+    
+    // Reset addition data
+    setNewRowData({
+      code: '',
+      description: '',
+      unit: 'pz',
+      unit_price: 0,
+      quantity: 1,
+      markup: 0.25
+    })
+    setActiveField(null)
+    setCatalogSuggestions([])
+    setShowCatalogDropdown(false)
+
+    await saveQuoteSilently(quoteMeta, updatedItems)
+  }
+
+  const handleDuplicateCreateNew = async () => {
+    const { newItem } = duplicateModal
+    if (!newItem) return
+
+    await proceedAddRow(newItem)
+    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+  }
+
+  // Push newRowData as a row item inside quoteItems
+  const handleAddRowToQuote = async () => {
+    if (!newRowData.description.trim()) return
+    const newItem = {
+      id: null,
+      code: newRowData.code || '',
+      description: newRowData.description.trim(),
+      unit: newRowData.unit || 'pz',
+      unit_price: newRowData.unit_price,
+      quantity: newRowData.quantity,
+      markup: newRowData.markup
+    }
+
+    // Check for duplicate by code (if code is not empty) or description
+    const existingIndex = quoteItems.findIndex(item => {
+      if (newItem.code && item.code) {
+        return item.code.toLowerCase().trim() === newItem.code.toLowerCase().trim()
+      }
+      return item.description.toLowerCase().trim() === newItem.description.toLowerCase().trim()
+    })
+
+    if (existingIndex !== -1) {
+      setDuplicateModal({
+        isOpen: true,
+        newItem,
+        existingIndex,
+        existingItem: quoteItems[existingIndex]
+      })
+      return
+    }
+
+    await proceedAddRow(newItem)
   }
 
   // Remove row item
@@ -1342,6 +1446,70 @@ const Quotes = () => {
         cancelText="Annulla"
         type="danger"
       />
+
+      {/* Duplicate Item Warning Portal */}
+      {duplicateModal.isOpen && duplicateModal.existingItem && duplicateModal.newItem && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
+          <div 
+            onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })}
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+          />
+          
+          <div className="relative w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl overflow-hidden p-8 space-y-6">
+            <div className="flex justify-between items-start">
+              <div className="p-4 rounded-2xl bg-amber-50 text-amber-500">
+                <AlertTriangle size={24} />
+              </div>
+              <button 
+                onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })} 
+                className="p-2 text-slate-300 hover:text-slate-500 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">Articolo già presente</h3>
+              <p className="text-sm font-semibold text-slate-500 leading-relaxed">
+                L'articolo con codice <strong className="text-slate-700">"{duplicateModal.newItem.code || 'N/A'}"</strong> e descrizione <strong className="text-slate-700">"{duplicateModal.newItem.description}"</strong> è già presente in questo preventivo.
+              </p>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/80 space-y-1.5 text-xs">
+                <p className="text-slate-400 font-bold uppercase tracking-wider text-[0.6rem]">Stato nel preventivo:</p>
+                <p className="font-bold text-slate-700">Quantità esistente: {duplicateModal.existingItem.quantity} {duplicateModal.existingItem.unit}</p>
+                <p className="font-bold text-accent">Nuova quantità da inserire: {duplicateModal.newItem.quantity} {duplicateModal.newItem.unit}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleDuplicateAdd}
+                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20 cursor-pointer"
+              >
+                Somma quantità (+{duplicateModal.newItem.quantity} {duplicateModal.existingItem.unit} = {duplicateModal.existingItem.quantity + duplicateModal.newItem.quantity})
+              </button>
+              <button
+                onClick={handleDuplicateOverwrite}
+                className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-amber-500/20 cursor-pointer"
+              >
+                Sovrascrivi quantità (diventa {duplicateModal.newItem.quantity} {duplicateModal.newItem.unit})
+              </button>
+              <button
+                onClick={handleDuplicateCreateNew}
+                className="w-full py-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all cursor-pointer"
+              >
+                Aggiungi come riga separata
+              </button>
+              <button
+                onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })}
+                className="w-full py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all cursor-pointer"
+              >
+                Annulla inserimento
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
