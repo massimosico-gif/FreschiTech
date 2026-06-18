@@ -581,16 +581,30 @@ const Quotes = () => {
           </div>
         </div>
 
-        {/* Auto-save Info Banner */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 flex items-start gap-4 text-emerald-800">
-          <Check size={22} className="text-emerald-500 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700">Salvataggio Automatico Attivo</h4>
-            <p className="text-xs font-semibold leading-relaxed">
-              Tutte le modifiche agli articoli, inclusi inserimenti, modifiche e rimozioni, vengono salvate automaticamente e all'istante nel database.
-            </p>
+        {/* Totals Summary Card (Moved above Nuovo Articolo Card) */}
+        {quoteItems.length > 0 && (
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-[2.5rem] p-8 shadow-xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-white/10 text-center">
+              <div className="space-y-2">
+                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Costo Totale Materiali</span>
+                <p className="text-2xl font-black">{formatEuro(totals.cost)}</p>
+              </div>
+              <div className="space-y-2 pt-4 md:pt-0">
+                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Valore Vendita (Preventivo)</span>
+                <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.sale)}</p>
+              </div>
+              <div className="space-y-2 pt-4 md:pt-0">
+                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Margine Stimato</span>
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.margin)}</p>
+                  <span className="text-[0.65rem] font-black px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">
+                    +{totals.marginPercent.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Nuovo Articolo Card */}
         <Card hoverEffect={false} className="p-6 bg-white/40 backdrop-blur-md border border-white/50 shadow-xl rounded-[2.5rem] relative z-40 space-y-4">
@@ -970,30 +984,7 @@ const Quotes = () => {
           )}
         </Card>
 
-        {/* Totals Summary Card */}
-        {quoteItems.length > 0 && (
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-[2.5rem] p-8 shadow-xl">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-white/10 text-center">
-              <div className="space-y-2">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Costo Totale Materiali</span>
-                <p className="text-2xl font-black">{formatEuro(totals.cost)}</p>
-              </div>
-              <div className="space-y-2 pt-4 md:pt-0">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Valore Vendita (Preventivo)</span>
-                <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.sale)}</p>
-              </div>
-              <div className="space-y-2 pt-4 md:pt-0">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Margine Stimato</span>
-                <div className="flex items-center justify-center gap-2">
-                  <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.margin)}</p>
-                  <span className="text-[0.65rem] font-black px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">
-                    +{totals.marginPercent.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         {/* Metadata Editor Drawer (Only header fields) */}
         <DrawerShell
