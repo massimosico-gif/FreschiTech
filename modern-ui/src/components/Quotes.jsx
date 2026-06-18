@@ -175,8 +175,26 @@ const Quotes = () => {
     setActiveField(null)
   }
 
+  const saveQuoteSilently = async (meta, items) => {
+    if (!meta.id || !meta.client_id || !meta.title.trim() || !meta.created_at) return
+    try {
+      const quoteData = {
+        id: meta.id,
+        client_id: parseInt(meta.client_id),
+        title: meta.title.trim(),
+        description: meta.description.trim() || null,
+        status: meta.status,
+        created_at: meta.created_at
+      }
+      await invoke('save_quote', { quote: quoteData, items })
+      await loadData()
+    } catch (err) {
+      console.error("Errore nel salvataggio automatico del preventivo:", err)
+    }
+  }
+
   // Push newRowData as a row item inside quoteItems
-  const handleAddRowToQuote = () => {
+  const handleAddRowToQuote = async () => {
     if (!newRowData.description.trim()) return
     const newItem = {
       id: null,
@@ -187,7 +205,8 @@ const Quotes = () => {
       quantity: newRowData.quantity,
       markup: newRowData.markup
     }
-    setQuoteItems(prev => [...prev, newItem])
+    const updatedItems = [...quoteItems, newItem]
+    setQuoteItems(updatedItems)
     
     // Reset addition data
     setNewRowData({
@@ -201,6 +220,8 @@ const Quotes = () => {
     setActiveField(null)
     setCatalogSuggestions([])
     setShowCatalogDropdown(false)
+
+    await saveQuoteSilently(quoteMeta, updatedItems)
   }
 
   // Remove row item
@@ -235,11 +256,14 @@ const Quotes = () => {
     setInlineItemFormData(null)
   }
 
-  const handleSaveEditItem = () => {
+  const handleSaveEditItem = async () => {
     if (!inlineItemFormData || !inlineItemFormData.description.trim()) return
-    setQuoteItems(prev => prev.map((item, i) => i === editingItemIndex ? inlineItemFormData : item))
+    const updatedItems = quoteItems.map((item, i) => i === editingItemIndex ? inlineItemFormData : item)
+    setQuoteItems(updatedItems)
     setEditingItemIndex(null)
     setInlineItemFormData(null)
+
+    await saveQuoteSilently(quoteMeta, updatedItems)
   }
 
   const handleInlineItemFieldChange = (field, value) => {
@@ -254,9 +278,11 @@ const Quotes = () => {
     })
   }
 
-  const handleConfirmRemoveItem = () => {
+  const handleConfirmRemoveItem = async () => {
     if (deleteItemModal.itemIndex !== null) {
-      setQuoteItems(prev => prev.filter((_, i) => i !== deleteItemModal.itemIndex))
+      const updatedItems = quoteItems.filter((_, i) => i !== deleteItemModal.itemIndex)
+      setQuoteItems(updatedItems)
+      await saveQuoteSilently(quoteMeta, updatedItems)
     }
     setDeleteItemModal({ isOpen: false, itemIndex: null })
   }
@@ -551,25 +577,17 @@ const Quotes = () => {
               title="Elimina Preventivo"
             >
               <Trash2 size={14} />
-              Elimina Preventivo
-            </button>
-            <button
-              onClick={handleSaveItems}
-              className="px-5 py-3 bg-accent text-white hover:bg-accent/90 rounded-xl text-[0.65rem] font-black uppercase tracking-widest shadow-lg shadow-accent/20 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5 font-bold"
-            >
-              <Save size={14} />
-              Salva Modifiche
             </button>
           </div>
         </div>
 
-        {/* Warning Notice Banner */}
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex items-start gap-4 text-amber-800">
-          <AlertTriangle size={22} className="text-amber-500 shrink-0 mt-0.5" />
+        {/* Auto-save Info Banner */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 flex items-start gap-4 text-emerald-800">
+          <Check size={22} className="text-emerald-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <h4 className="text-xs font-black uppercase tracking-widest text-amber-700">Area di Test - Articoli Preventivo</h4>
+            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700">Salvataggio Automatico Attivo</h4>
             <p className="text-xs font-semibold leading-relaxed">
-              Puoi cercare articoli nel listino materiali per inserirli nel preventivo, oppure creare elementi custom. Ricorda di salvare le modifiche prima di uscire.
+              Tutte le modifiche agli articoli, inclusi inserimenti, modifiche e rimozioni, vengono salvate automaticamente e all'istante nel database.
             </p>
           </div>
         </div>
@@ -1106,7 +1124,7 @@ const Quotes = () => {
           onClose={() => setDeleteItemModal({ isOpen: false, itemIndex: null })}
           onConfirm={handleConfirmRemoveItem}
           title="Rimuovi Articolo"
-          message="Sei sicuro di voler rimuovere questo articolo dal preventivo? Questa azione non salverà le modifiche al database finché non farai clic su 'Salva Modifiche' in alto."
+          message="Sei sicuro di voler rimuovere questo articolo dal preventivo? Questa azione salverà le modifiche al database immediatamente."
           confirmText="Rimuovi"
           cancelText="Annulla"
           type="danger"
