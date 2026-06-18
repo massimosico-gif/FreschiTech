@@ -11,19 +11,30 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
-  Edit3,
   Trash2,
   Receipt,
-  Truck
+  Truck,
+  Users,
+  FileText,
+  Activity,
+  X
 } from 'lucide-react'
 import Select from '../ui/Select'
+import MultiSelect from '../ui/MultiSelect'
+import DatePicker from '../ui/DatePicker'
+import PhaseSelector from '../ui/PhaseSelector'
+import ConfirmModal from '../ui/ConfirmModal'
 
-const ExpensesTab = ({ expenses, costCenters, onAdd, onEdit, onDelete, defaultCostCenterId = null }) => {
+const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = null, projectId = null, onSave = null }) => {
   // Brand Configuration (Centralized Color)
   const brandColor = 'accent'; // Lely Red
   
   // Sorting
   const [sort, setSort] = useState({ field: 'date', direction: 'desc' })
+
+  // Delete confirmation state
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
+  const [expenseToDeleteId, setExpenseToDeleteId] = useState(null)
 
   // Filters
   const initialFilters = {
@@ -36,17 +47,170 @@ const ExpensesTab = ({ expenses, costCenters, onAdd, onEdit, onDelete, defaultCo
   const [phaseOptions, setPhaseOptions] = useState([
     { id: 'all', label: 'Tutte le Fasi' }
   ])
+  const [inlinePhaseOptions, setInlinePhaseOptions] = useState([{ id: 'Generale', label: 'Generale' }])
+  const [employees, setEmployees] = useState([])
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
+
+  const initialExpenseData = useMemo(() => ({
+    project_id: projectId ? Number(projectId) : null,
+    cost_center_id: defaultCostCenterId ? parseInt(defaultCostCenterId) : null,
+    phase: 'Generale',
+    date: new Date().toISOString().split('T')[0],
+    description: '',
+    supplier: '',
+    amount: 0,
+    markup: 0.00
+  }), [projectId, defaultCostCenterId])
+
+  const [newExpenseData, setNewExpenseData] = useState(initialExpenseData)
+  const [isBoxOpen, setIsBoxOpen] = useState(() => {
+    const val = localStorage.getItem('expenses_box_open')
+    return val !== 'false'
+  })
 
   useEffect(() => {
-    invoke('get_global_settings').then(res => {
-      if (res.phases_labor && res.phases_labor.length > 0) {
+    localStorage.setItem('expenses_box_open', isBoxOpen)
+  }, [isBoxOpen])
+
+  // Sincronizza i valori del nuovo box di inserimento in base ai filtri correnti o al defaultCostCenterId
+  useEffect(() => {
+    setNewExpenseData(prev => ({
+      ...prev,
+      cost_center_id: defaultCostCenterId 
+        ? parseInt(defaultCostCenterId) 
+        : (filters.cc !== 'all' && filters.cc !== 'none' ? parseInt(filters.cc) : prev.cost_center_id),
+      phase: filters.phase !== 'all' ? filters.phase : prev.phase
+    }))
+  }, [defaultCostCenterId, filters.cc, filters.phase])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const empData = await invoke('get_employees')
+        setEmployees(empData || [])
+      } catch (err) {
+        console.error("Errore caricamento dipendenti:", err)
+      }
+
+      try {
+        const res = await invoke('get_global_settings')
+        if (res.phases_labor && res.phases_labor.length > 0) {
+          setPhaseOptions([
+            { id: 'all', label: 'Tutte le Fasi' },
+            ...res.phases_labor.map(p => ({ id: p, label: p }))
+          ])
+          setInlinePhaseOptions(res.phases_labor.map(p => ({ id: p, label: p })))
+        }
+      } catch (err) {
+        console.error("Errore caricamento settings:", err)
+      }
+    }
+    fetchData()
+  }, [])
+
+  const handleInputSelect = (e) => {
+    const target = e.target
+    setTimeout(() => {
+      if (target) target.select()
+    }, 50)
+  }
+
+  const handleAddNewEmployee = async (newEmployeeName) => {
+    const trimmed = newEmployeeName.trim()
+    if (!trimmed) return
+
+    try {
+      const newEmp = {
+        name: trimmed,
+        default_hourly_cost: 30.0
+      }
+      await invoke('save_employee', { employee: newEmp })
+      const updatedEmployees = await invoke('get_employees')
+      setEmployees(updatedEmployees || [])
+      const created = updatedEmployees.find(e => e.name.toLowerCase() === trimmed.toLowerCase())
+      if (created) {
+        setSelectedEmployeeIds(prev => [...prev, created.id])
+      }
+    } catch (err) {
+      console.error("Errore nel salvataggio del nuovo operatore:", err)
+      alert("Impossibile salvare il nuovo operatore: " + err)
+    }
+  }
+
+  const handleAddNewPhase = async (newPhaseName) => {
+    const trimmed = newPhaseName.trim()
+    if (!trimmed) return
+
+    try {
+      const currentSettings = await invoke('get_global_settings')
+      const phases = currentSettings.phases_labor || []
+
+      if (!phases.includes(trimmed)) {
+        const updatedPhases = [...phases, trimmed]
+        const newSettings = {
+          ...currentSettings,
+          phases_labor: updatedPhases
+        }
+
+        await invoke('save_global_settings', { settings: newSettings })
         setPhaseOptions([
           { id: 'all', label: 'Tutte le Fasi' },
-          ...res.phases_labor.map(p => ({ id: p, label: p }))
+          ...updatedPhases.map(p => ({ id: p, label: p }))
         ])
+        setInlinePhaseOptions(updatedPhases.map(p => ({ id: p, label: p })))
       }
-    }).catch(console.error)
-  }, [])
+
+      setNewExpenseData(prev => ({ ...prev, phase: trimmed }))
+    } catch (err) {
+      console.error("Errore nel salvataggio della nuova fase:", err)
+      alert("Impossibile salvare la nuova fase: " + err)
+    }
+  }
+
+  const handleAddNewExpenseFromBox = async () => {
+    if (isAddDisabled) return
+
+    let finalDescription = newExpenseData.description
+    if (selectedEmployeeIds.length > 0) {
+      const names = selectedEmployeeIds
+        .map(id => employees.find(emp => emp.id === id)?.name)
+        .filter(Boolean)
+        .join(', ')
+      finalDescription = `${newExpenseData.description} (${names})`
+    }
+
+    const entry = {
+      ...newExpenseData,
+      project_id: Number(projectId),
+      cost_center_id: newExpenseData.cost_center_id ? parseInt(newExpenseData.cost_center_id) : null,
+      description: finalDescription,
+      amount: parseFloat(newExpenseData.amount) || 0,
+      markup: parseFloat(newExpenseData.markup) || 0.00
+    }
+
+    try {
+      if (onSave) {
+        await onSave(entry)
+      }
+      setSelectedEmployeeIds([])
+      setNewExpenseData(prev => ({
+        ...prev,
+        description: '',
+        supplier: '',
+        amount: 0,
+        markup: 0.00
+      }))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const employeeOptions = useMemo(() => employees.map(e => ({ 
+    id: e.id, 
+    label: e.name 
+  })), [employees])
+
+  const isAddDisabled = !newExpenseData.description.trim() || !newExpenseData.amount || parseFloat(newExpenseData.amount) <= 0
 
   const ccOptions = useMemo(() => [
     { id: 'all', label: 'Tutti i Centri' },
@@ -116,15 +280,185 @@ const ExpensesTab = ({ expenses, costCenters, onAdd, onEdit, onDelete, defaultCo
             {filteredData.length} voci registrate {filteredData.length !== expenses.length ? '(filtrate)' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        {onSave && (
           <button 
-            onClick={onAdd}
-            className={`bg-${brandColor} text-white px-8 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-${brandColor}/90 transition-all shadow-xl shadow-${brandColor}/20 flex items-center gap-2`}
+            onClick={() => setIsBoxOpen(p => !p)}
+            className="bg-accent text-white px-8 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 flex items-center gap-2"
           >
-            <Plus size={18} /> Nuova Spesa
+            {isBoxOpen ? <X size={18} /> : <Plus size={18} />} 
+            {isBoxOpen ? 'Nascondi Aggiunta' : 'Aggiungi Spesa'}
           </button>
-        </div>
+        )}
       </div>
+
+      {/* Box Aggiunta Spesa Persistente */}
+      {onSave && isBoxOpen && (
+        <div className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
+                <Plus size={14} className="stroke-[3]" />
+              </div>
+              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-500">Nuova Registrazione Spesa</span>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Riepilogo economico dell'aggiunta */}
+              {(() => {
+                const amount = parseFloat(newExpenseData.amount) || 0;
+                const markup = parseFloat(newExpenseData.markup) || 0;
+                const totalSale = amount * (1 + markup);
+                return (
+                  <div className="text-right">
+                    <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
+                    <span className="text-sm font-black text-slate-800">
+                      € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )
+              })()}
+              <button 
+                onClick={() => setIsBoxOpen(false)}
+                className="text-slate-400 hover:text-rose-500 p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                title="Chiudi pannello di inserimento"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="relative z-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+            {/* Operatori coinvolti */}
+            <div className="lg:col-span-3 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Operatori coinvolti</label>
+              <MultiSelect 
+                options={employeeOptions}
+                selectedValues={selectedEmployeeIds}
+                onChange={setSelectedEmployeeIds}
+                placeholder="Seleziona squadra..."
+                icon={Users}
+                onAddNew={handleAddNewEmployee}
+                compact={true}
+              />
+            </div>
+
+            {/* Descrizione / Tipo Spesa * */}
+            <div className="lg:col-span-3 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione / Tipo Spesa *</label>
+              <input 
+                type="text" 
+                placeholder="Es: Pranzo, Hotel, Carburante..."
+                value={newExpenseData.description}
+                onChange={(e) => setNewExpenseData(p => ({ ...p, description: e.target.value }))}
+                onFocus={handleInputSelect}
+                onClick={handleInputSelect}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+              />
+            </div>
+
+            {/* Fornitore / Nota */}
+            <div className="lg:col-span-4 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
+              <input 
+                type="text" 
+                placeholder="Nome locale o esercente..."
+                value={newExpenseData.supplier}
+                onChange={(e) => setNewExpenseData(p => ({ ...p, supplier: e.target.value }))}
+                onFocus={handleInputSelect}
+                onClick={handleInputSelect}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+              />
+            </div>
+
+            {/* Data */}
+            <div className="lg:col-span-2 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data Spesa</label>
+              <DatePicker 
+                compact={true}
+                value={newExpenseData.date}
+                onChange={(val) => setNewExpenseData(p => ({ ...p, date: val }))}
+              />
+            </div>
+          </div>
+
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end pt-2">
+            {/* Centro di Costo (se non è predefinito) */}
+            {!defaultCostCenterId ? (
+              <div className="lg:col-span-4 space-y-1.5">
+                <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                <select
+                  value={newExpenseData.cost_center_id || ''}
+                  onChange={(e) => setNewExpenseData(p => ({ ...p, cost_center_id: e.target.value ? parseInt(e.target.value) : null }))}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+                >
+                  <option value="">Nessuno (Spesa Generale)</option>
+                  {costCenters.map(cc => (
+                    <option key={cc.id} value={cc.id}>{cc.model}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {/* Ambito (Fase) */}
+            <div className={`${!defaultCostCenterId ? 'lg:col-span-4' : 'lg:col-span-6'} space-y-1.5`}>
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
+              <PhaseSelector
+                phases={inlinePhaseOptions}
+                value={newExpenseData.phase}
+                onChange={(val) => setNewExpenseData(p => ({ ...p, phase: val }))}
+                onAddNew={handleAddNewPhase}
+                placeholder="Seleziona fase..."
+                compact={true}
+              />
+            </div>
+
+            {/* Importo (€) */}
+            <div className="lg:col-span-2 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Importo *</label>
+              <input 
+                type="number" 
+                step="0.01"
+                min="0"
+                placeholder="Importo"
+                value={newExpenseData.amount}
+                onChange={(e) => setNewExpenseData(p => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+                onFocus={handleInputSelect}
+                onClick={handleInputSelect}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-right text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+              />
+            </div>
+
+            {/* Ricarico (%) */}
+            <div className="lg:col-span-2 space-y-1.5">
+              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric. %</label>
+              <input 
+                type="number"
+                step="1"
+                placeholder="Ric. %"
+                value={Math.round((newExpenseData.markup || 0) * 100)}
+                onChange={(e) => setNewExpenseData(p => ({ ...p, markup: (parseFloat(e.target.value) || 0) / 100 }))}
+                onFocus={handleInputSelect}
+                onClick={handleInputSelect}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-right text-emerald-600 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+              />
+            </div>
+
+            {/* Bottone Registra */}
+            <div className="lg:col-span-2 flex items-end justify-end w-full">
+              <button 
+                onClick={handleAddNewExpenseFromBox}
+                disabled={isAddDisabled}
+                className={`w-full py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
+                  isAddDisabled 
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+                    : 'bg-accent text-white hover:bg-accent/90 shadow-md shadow-accent/15'
+                }`}
+              >
+                <Plus size={16} /> Aggiungi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar Filtri Spese */}
       <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
@@ -273,15 +607,14 @@ const ExpensesTab = ({ expenses, costCenters, onAdd, onEdit, onDelete, defaultCo
                   </td>
                   <td className="px-8 py-6 text-center">
                     <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+
                       <button 
-                        onClick={() => onEdit(ex)}
+                        onClick={() => {
+                          setExpenseToDeleteId(ex.id)
+                          setIsConfirmDeleteOpen(true)
+                        }}
                         className={`p-2 text-slate-400 hover:text-${brandColor} hover:bg-${brandColor}/10 rounded-lg transition-all`}
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button 
-                        onClick={() => onDelete(ex.id)}
-                        className={`p-2 text-slate-400 hover:text-${brandColor} hover:bg-${brandColor}/10 rounded-lg transition-all`}
+                        title="Elimina Spesa"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -319,6 +652,26 @@ const ExpensesTab = ({ expenses, costCenters, onAdd, onEdit, onDelete, defaultCo
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isConfirmDeleteOpen}
+        onClose={() => {
+          setIsConfirmDeleteOpen(false)
+          setExpenseToDeleteId(null)
+        }}
+        onConfirm={async () => {
+          if (expenseToDeleteId) {
+            await onDelete(expenseToDeleteId)
+          }
+          setIsConfirmDeleteOpen(false)
+          setExpenseToDeleteId(null)
+        }}
+        title="Elimina Spesa"
+        message="Sei sicuro di voler eliminare definitivamente questa spesa? L'azione è irreversibile."
+        confirmText="Elimina"
+        cancelText="Annulla"
+        type="danger"
+      />
     </div>
   )
 }

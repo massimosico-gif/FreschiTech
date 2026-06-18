@@ -4,46 +4,63 @@ import {
   Target, 
   Save, 
   AlertCircle,
-  Tag,
-  Euro,
-  Truck,
-  Wrench
+  Euro
 } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
-import Select from './ui/Select'
 import CategorySelector from './ui/CategorySelector'
+import { CostCenter } from '../types'
 
-const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
-  const [errors, setErrors] = useState({})
-  const [formData, setFormData] = useState({
+interface EditCostCenterDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  cc: CostCenter | null;
+  projectId: number | string;
+  onSave: (data: Partial<CostCenter>) => void;
+}
+
+const EditCostCenterDrawer: React.FC<EditCostCenterDrawerProps> = ({ 
+  isOpen, 
+  onClose, 
+  cc, 
+  projectId, 
+  onSave 
+}) => {
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [feePercent, setFeePercent] = useState<number>(0.06)
+  const [formData, setFormData] = useState<Partial<CostCenter>>({
     project_id: Number(projectId),
     brand: '',
     model: '',
     category: 'Robot Lely',
+    accepted_budget: 0,
     base_cost: 0,
     markup: 0.15,
     shipping: 0,
-    install_fee: 0
+    install_fee: 0,
+    install_fee_percent: 0.06
   })
 
-  const [categoryOptions, setCategoryOptions] = useState([
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; label: string }>>([
     { id: 'Generale', label: 'Generale' }
   ])
 
   useEffect(() => {
-    invoke('get_global_settings').then(res => {
+    invoke<any>('get_global_settings').then(res => {
       if (res.categories_cost_center && res.categories_cost_center.length > 0) {
-        setCategoryOptions(res.categories_cost_center.map(c => ({ id: c, label: c })))
+        setCategoryOptions(res.categories_cost_center.map((c: string) => ({ id: c, label: c })))
+      }
+      if (res.default_install_fee_percent !== undefined) {
+        setFeePercent(parseFloat(res.default_install_fee_percent) || 0)
       }
     }).catch(console.error)
   }, [])
 
-  const handleAddNewCategory = async (newCategoryName) => {
+  const handleAddNewCategory = async (newCategoryName: string) => {
     const trimmed = newCategoryName.trim()
     if (!trimmed) return
 
     try {
-      const currentSettings = await invoke('get_global_settings')
+      const currentSettings = await invoke<any>('get_global_settings')
       const categories = currentSettings.categories_cost_center || []
 
       if (!categories.includes(trimmed)) {
@@ -54,7 +71,7 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
         }
 
         await invoke('save_global_settings', { settings: newSettings })
-        setCategoryOptions(updatedCategories.map(c => ({ id: c, label: c })))
+        setCategoryOptions(updatedCategories.map((c: string) => ({ id: c, label: c })))
       }
 
       setFormData(prev => ({ ...prev, category: trimmed }))
@@ -70,10 +87,12 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
       if (cc) {
         setFormData({
           ...cc,
+          accepted_budget: cc.accepted_budget || 0,
           base_cost: cc.base_cost || 0,
           markup: cc.markup || 0,
           shipping: cc.shipping || 0,
-          install_fee: cc.install_fee || 0
+          install_fee: cc.install_fee || 0,
+          install_fee_percent: cc.install_fee_percent !== undefined && cc.install_fee_percent !== null ? cc.install_fee_percent : feePercent
         })
       } else {
         setFormData({
@@ -81,16 +100,18 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
           brand: '',
           model: '',
           category: 'Robot Lely',
+          accepted_budget: 0,
           base_cost: 0,
           markup: 0.15,
           shipping: 0,
-          install_fee: 0
+          install_fee: 0,
+          install_fee_percent: feePercent
         })
       }
     }
-  }, [isOpen, cc, projectId])
+  }, [isOpen, cc, projectId, feePercent])
 
-  const validateField = (name, value) => {
+  const validateField = (name: string, value: any) => {
     let error = ''
     if (name === 'model' && !value) {
       error = 'Il modello/nome è obbligatorio'
@@ -99,7 +120,7 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
     return !error
   }
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     validateField(name, value)
@@ -108,13 +129,17 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
   const handleSaveInternal = () => {
     if (!validateField('model', formData.model)) return
     
+    const acceptedBudgetVal = parseFloat(String(formData.accepted_budget)) || 0
+    
     const dataToSave = {
       ...formData,
       project_id: Number(formData.project_id || projectId),
-      base_cost: parseFloat(formData.base_cost) || 0,
-      markup: parseFloat(formData.markup) || 0,
-      shipping: parseFloat(formData.shipping) || 0,
-      install_fee: parseFloat(formData.install_fee) || 0
+      accepted_budget: acceptedBudgetVal,
+      base_cost: cc ? parseFloat(String(formData.base_cost)) || 0 : 0,
+      markup: cc && formData.markup !== undefined ? parseFloat(String(formData.markup)) : 0.15,
+      shipping: cc ? parseFloat(String(formData.shipping)) || 0 : 0,
+      install_fee: cc ? parseFloat(String(formData.install_fee)) || 0 : 0,
+      install_fee_percent: cc ? (formData.install_fee_percent !== undefined && formData.install_fee_percent !== null ? parseFloat(String(formData.install_fee_percent)) : feePercent) : feePercent
     }
     
     onSave(dataToSave)
@@ -161,8 +186,8 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
             <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Categoria</label>
             <CategorySelector 
               categories={categoryOptions}
-              value={formData.category}
-              onChange={(val) => setFormData(p => ({...p, category: val}))}
+              value={formData.category || 'Robot Lely'}
+              onChange={(val: string) => setFormData(p => ({...p, category: val}))}
               onAddNew={handleAddNewCategory}
             />
           </div>
@@ -170,11 +195,11 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Marca</label>
-              <input name="brand" value={formData.brand} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" placeholder="Es: Lely" />
+              <input name="brand" value={formData.brand || ''} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" placeholder="Es: Lely" />
             </div>
             <div className="space-y-2">
               <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Modello *</label>
-              <input name="model" value={formData.model} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className={`w-full bg-white/50 border rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.model ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`} placeholder="Es: Astronaut A5" />
+              <input name="model" value={formData.model || ''} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className={`w-full bg-white/50 border rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.model ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`} placeholder="Es: Astronaut A5" />
               {errors.model && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.model}</p>}
             </div>
           </div>
@@ -183,37 +208,14 @@ const EditCostCenterDrawer = ({ isOpen, onClose, cc, projectId, onSave }) => {
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 bg-emerald-400 rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Configurazione Costi</span>
+            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Dati Economici</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Costo Base (€)</label>
-              <div className="relative">
-                <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="number" name="base_cost" value={formData.base_cost} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ricarico (%)</label>
-              <input type="number" name="markup" value={formData.markup * 100} onChange={(e) => setFormData(p => ({...p, markup: parseFloat(e.target.value)/100}))} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Trasporto (€)</label>
-              <div className="relative">
-                <Truck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="number" name="shipping" value={formData.shipping} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fee Montaggio (€)</label>
-              <div className="relative">
-                <Wrench className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="number" name="install_fee" value={formData.install_fee} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
-              </div>
+          <div className="space-y-2">
+            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Preventivo Accettato (€)</label>
+            <div className="relative">
+              <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input type="number" name="accepted_budget" value={formData.accepted_budget || 0} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
             </div>
           </div>
         </section>

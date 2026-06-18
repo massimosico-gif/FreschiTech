@@ -1,7 +1,7 @@
 {
   "name": "freschitech",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.1.19",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,17 +18,21 @@
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/cli": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.11.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,6 +46,7 @@
     "globals": "^17.5.0",
     "postcss": "^8.5.12",
     "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
     "vite": "^8.0.10"
   }
 }

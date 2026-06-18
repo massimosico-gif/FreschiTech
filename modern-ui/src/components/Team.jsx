@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Plus, Search, User, Loader2, Euro, Trash2, Edit3, HardHat } from 'lucide-react'
 import EntityCard from './ui/EntityCard'
@@ -14,6 +14,27 @@ const Team = () => {
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState(null)
+  
+  // Controlled form states
+  const [name, setName] = useState('')
+  const [cost, setCost] = useState(30.00)
+
+  useEffect(() => {
+    if (isDrawerOpen) {
+      setName(selectedEmployee?.name || '')
+      setCost(selectedEmployee?.default_hourly_cost !== undefined ? selectedEmployee.default_hourly_cost : 30.00)
+    }
+  }, [isDrawerOpen, selectedEmployee])
+
+  const isSaveDisabled = useMemo(() => {
+    const parsedCost = parseFloat(cost)
+    const isValid = name.trim() !== '' && !isNaN(parsedCost) && parsedCost >= 0
+    if (!isValid) return true
+    if (selectedEmployee) {
+      return name === selectedEmployee.name && parsedCost === selectedEmployee.default_hourly_cost
+    }
+    return false
+  }, [name, cost, selectedEmployee])
 
   const loadEmployees = async () => {
     setLoading(true)
@@ -37,11 +58,11 @@ const Team = () => {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    const formData = new FormData(e.target)
+    if (isSaveDisabled) return
     const employee = {
       id: selectedEmployee?.id || null,
-      name: formData.get('name'),
-      default_hourly_cost: parseFloat(formData.get('cost'))
+      name: name.trim(),
+      default_hourly_cost: parseFloat(cost)
     }
 
     try {
@@ -110,6 +131,7 @@ const Team = () => {
               subtitle={`Costo Orario Default: € ${emp.default_hourly_cost.toFixed(2)}`}
               onEdit={() => { setSelectedEmployee(emp); setIsDrawerOpen(true); }}
               onDelete={() => { setEmployeeToDelete(emp.id); setIsConfirmOpen(true); }}
+              onClick={() => { setSelectedEmployee(emp); setIsDrawerOpen(true); }}
               footerItems={[
                 { icon: <Euro size={12} />, label: `${emp.default_hourly_cost.toFixed(2)} / h` }
               ]}
@@ -137,7 +159,8 @@ const Team = () => {
             <input 
               required
               name="name"
-              defaultValue={selectedEmployee?.name || ''}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               onFocus={(e) => setTimeout(() => e.target.select(), 0)}
               className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
             />
@@ -149,14 +172,20 @@ const Team = () => {
               type="number"
               step="0.01"
               name="cost"
-              defaultValue={selectedEmployee?.default_hourly_cost || 30.00}
+              value={cost}
+              onChange={(e) => setCost(e.target.value === '' ? '' : parseFloat(e.target.value))}
               onFocus={(e) => setTimeout(() => e.target.select(), 0)}
               className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
             />
           </div>
           <button 
             type="submit"
-            className="w-full py-4 bg-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-accent/20 hover:bg-accent/90 transition-all mt-4"
+            disabled={isSaveDisabled}
+            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all mt-4 ${
+              isSaveDisabled 
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+                : 'bg-accent text-white hover:bg-accent/90 shadow-xl shadow-accent/20'
+            }`}
           >
             {selectedEmployee ? 'Salva Modifiche' : 'Aggiungi alla Squadra'}
           </button>

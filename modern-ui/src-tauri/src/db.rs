@@ -23,6 +23,14 @@ pub fn get_connection() -> Result<Connection> {
 pub fn init_db() -> Result<()> {
     let conn = get_connection()?;
     
+    // Eseguiamo il controllo di integrità del database SQLite
+    if let Ok(integrity) = conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0)) {
+        if integrity != "ok" {
+            log::error!("DATABASE_CORRUPT: PRAGMA integrity_check: {}", integrity);
+            panic!("Database corrotto rilevato all'avvio: {}", integrity);
+        }
+    }
+    
     // Tabella Clienti
     conn.execute(
         "CREATE TABLE IF NOT EXISTS clients (
@@ -79,6 +87,8 @@ pub fn init_db() -> Result<()> {
             markup REAL DEFAULT 0.0,
             shipping REAL DEFAULT 0.0,
             install_fee REAL DEFAULT 0.0,
+            install_fee_percent REAL DEFAULT 0.06,
+            accepted_budget REAL DEFAULT 0.0,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )",
         [],
@@ -134,6 +144,26 @@ pub fn init_db() -> Result<()> {
     let _ = conn.execute("ALTER TABLE projects ADD COLUMN km_cost REAL DEFAULT 0.50", []);
     let _ = conn.execute("ALTER TABLE labor ADD COLUMN travel_cost REAL DEFAULT 0.0", []);
 
+    // Aggiungi colonna accepted_budget a cost_centers se non esiste (migrazione sicura)
+    let has_accepted_budget: bool = conn.query_row(
+        "SELECT count(*) FROM pragma_table_info('cost_centers') WHERE name='accepted_budget'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0) > 0;
+    if !has_accepted_budget {
+        let _ = conn.execute("ALTER TABLE cost_centers ADD COLUMN accepted_budget REAL DEFAULT 0.0", []);
+    }
+
+    // Aggiungi colonna install_fee_percent a cost_centers se non esiste (migrazione sicura)
+    let has_install_fee_percent: bool = conn.query_row(
+        "SELECT count(*) FROM pragma_table_info('cost_centers') WHERE name='install_fee_percent'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0) > 0;
+    if !has_install_fee_percent {
+        let _ = conn.execute("ALTER TABLE cost_centers ADD COLUMN install_fee_percent REAL DEFAULT 0.06", []);
+    }
+
     // Tabella Spese (Expenses)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS expenses (
@@ -170,6 +200,68 @@ pub fn init_db() -> Result<()> {
         )",
         [],
     )?;
+
+    // Tabella Catalogo Materiali (Listini)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS catalog_materials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT,
+            description TEXT NOT NULL,
+            unit TEXT DEFAULT 'pz',
+            unit_price REAL DEFAULT 0.0,
+            supplier TEXT,
+            markup REAL DEFAULT 0.0
+        )",
+        [],
+    )?;
+
+    // Aggiungi colonna markup a catalog_materials se non esiste (migrazione sicura)
+    let has_markup: bool = conn.query_row(
+        "SELECT count(*) FROM pragma_table_info('catalog_materials') WHERE name='markup'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0) > 0;
+    if !has_markup {
+        let _ = conn.execute("ALTER TABLE catalog_materials ADD COLUMN markup REAL DEFAULT 0.0", []);
+    }
+
+    // Indici per velocizzare la ricerca
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_code ON catalog_materials (code)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_desc ON catalog_materials (description)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_supplier ON catalog_materials (supplier)", []);
+
+    // Tabella Preventivi
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS quotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'draft',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Tabella Voci Preventivo
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS quote_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_id INTEGER NOT NULL,
+            code TEXT,
+            description TEXT NOT NULL,
+            unit TEXT DEFAULT 'pz',
+            unit_price REAL DEFAULT 0.0,
+            quantity REAL DEFAULT 1.0,
+            markup REAL DEFAULT 0.0,
+            FOREIGN KEY (quote_id) REFERENCES quotes (id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_client ON quotes (client_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_item_quote ON quote_items (quote_id)", []);
 
     Ok(())
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Check, ChevronDown, Search, Layers } from 'lucide-react'
 
-const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Seleziona fase..." }) => {
+const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Seleziona fase...", compact = false }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const containerRef = useRef(null)
@@ -26,33 +26,42 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 flex items-center justify-between transition-all shadow-sm ${
-          isOpen ? 'ring-2 ring-accent/20 bg-white border-white' : ''
-        }`}
+        className={compact 
+          ? `w-full bg-white border border-slate-200 rounded-xl py-2 pl-8 pr-4 text-xs font-bold text-slate-700 flex items-center justify-between transition-all relative hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] ${
+              isOpen ? 'ring-4 ring-accent/10 border-accent/50 bg-white' : ''
+            }`
+          : `w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 flex items-center justify-between transition-all shadow-sm hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] ${
+              isOpen ? 'ring-4 ring-accent/10 border-accent/50 bg-white' : ''
+            }`
+        }
       >
-        <Layers className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <Layers className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${compact ? 'left-3' : 'left-5'}`} size={compact ? 13 : 18} />
         <span className={selectedPhase ? 'text-slate-700' : 'text-slate-400'}>
           {selectedPhase ? selectedPhase.label : placeholder}
         </span>
-        <ChevronDown className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} size={18} />
+        <ChevronDown className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} size={compact ? 13 : 18} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-3 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] shadow-2xl z-[400] overflow-hidden animate-premium-in p-2">
+        <div className={`absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-2xl border border-white/60 shadow-2xl z-[400] overflow-hidden animate-premium-in p-2 ${
+          compact ? 'rounded-2xl max-w-[280px]' : 'rounded-[2.5rem]'
+        }`}>
           <div className="relative p-2">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <Search className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${compact ? 'left-5' : 'left-6'}`} size={compact ? 12 : 14} />
             <input
               autoFocus
               type="text"
               placeholder="Cerca o crea fase..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-10 pr-4 text-xs font-bold text-slate-700 focus:ring-0"
+              className={`w-full bg-slate-50 border-none text-slate-700 font-bold focus:ring-0 ${
+                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.65rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
+              }`}
               onClick={(e) => e.stopPropagation()}
             />
           </div>
           
-          <div className="max-h-60 overflow-y-auto no-scrollbar py-2">
+          <div className="max-h-60 overflow-y-auto no-scrollbar py-1">
             {filteredPhases.length > 0 ? (
               filteredPhases.map(phase => (
                 <button
@@ -63,7 +72,9 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
                     setIsOpen(false)
                     setSearch('')
                   }}
-                  className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all group ${
+                  className={`w-full flex items-center justify-between transition-all group ${
+                    compact ? 'p-2 px-3 rounded-xl' : 'p-4 rounded-2xl'
+                  } ${
                     value === phase.id ? 'bg-accent/5 text-accent' : 'hover:bg-slate-50 text-slate-600'
                   }`}
                 >
@@ -72,7 +83,7 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
                 </button>
               ))
             ) : (
-              <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
+              <div className="p-4 text-center text-slate-400 flex flex-col items-center gap-2">
                 <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessuna fase trovata</p>
                 {onAddNew && (
                   <button
@@ -81,9 +92,9 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
                       onAddNew(search)
                       setIsOpen(false)
                     }}
-                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.6rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                    className="px-3 py-1.5 bg-accent text-white rounded-xl text-[0.55rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
                   >
-                    {search ? `+ Aggiungi "${search}"` : '+ Aggiungi Nuova Fase'}
+                    {search ? `+ "${search}"` : '+ Aggiungi Nuova Fase'}
                   </button>
                 )}
               </div>

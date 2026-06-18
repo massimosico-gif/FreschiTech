@@ -89,7 +89,9 @@ const EntityCard = ({
                     </p>
                     <p className={`text-xs font-extrabold transition-colors duration-500 ${
                       stat.highlight 
-                        ? 'text-emerald-500 group-hover:text-white' 
+                        ? (stat.value && stat.value.includes('-') 
+                           ? 'text-rose-500 group-hover:text-rose-200' 
+                           : 'text-emerald-500 group-hover:text-white') 
                         : 'text-slate-700 group-hover:text-white'
                     }`}>
                       {stat.value}

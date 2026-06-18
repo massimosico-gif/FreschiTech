@@ -27,7 +27,8 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     email: '',
     pec: '',
     phone: '',
-    notes: ''
+    notes: '',
+    distance: 0
   })
 
   const validateField = (name, value) => {
@@ -59,7 +60,10 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
       return
     }
     
-    onSave(formData)
+    onSave({
+      ...formData,
+      distance: parseInt(formData.distance) || 0
+    })
   }
 
   const isDirty = initialData && JSON.stringify(formData) !== JSON.stringify(initialData)
@@ -163,7 +167,8 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           email: client.email || '',
           pec: client.pec || '',
           phone: client.phone || '',
-          notes: client.notes || ''
+          notes: client.notes || '',
+          distance: client.distance || 0
         }
         setFormData(data)
         setInitialData(data)
@@ -183,7 +188,8 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           email: '',
           pec: '',
           phone: '',
-          notes: ''
+          notes: '',
+          distance: 0
         }
         setFormData(newData)
         setInitialData(newData)
@@ -231,28 +237,11 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
       }
     >
       <div className="space-y-10">
-        {/* SEZIONE 1: TIPOLOGIA E NOME */}
+        {/* SEZIONE 1: DENOMINAZIONE */}
         <section className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 bg-accent rounded-full"></div>
-            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Tipologia e Denominazione</span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { id: 'company', label: 'Azienda', icon: <Building2 size={14} /> },
-              { id: 'private', label: 'Privato', icon: <User size={14} /> }
-            ].map((t) => (
-              <button 
-                key={t.id} 
-                type="button" 
-                onClick={() => setFormData(prev => ({ ...prev, type: t.id }))}
-                className={`py-4 rounded-2xl text-[0.6rem] font-black uppercase border transition-all flex flex-col items-center gap-2 ${formData.type === t.id ? 'bg-accent text-white border-accent' : 'bg-white text-slate-400 border-white hover:border-slate-200'}`}
-              >
-                {t.icon}
-                {t.label}
-              </button>
-            ))}
+            <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Denominazione</span>
           </div>
 
           <div className="space-y-2">
@@ -381,6 +370,22 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
+            <div className="relative">
+              <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="number"
+                name="distance"
+                value={formData.distance}
+                onChange={handleChange}
+                onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+                className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                placeholder="Es: 45"
+              />
+            </div>
           </div>
         </section>
 

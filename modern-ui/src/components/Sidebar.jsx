@@ -3,7 +3,8 @@ import {
   LayoutDashboard, 
   Users,
   Briefcase,
-  Settings
+  Settings,
+  FileText
 } from 'lucide-react'
 
 const Sidebar = ({ 
@@ -21,6 +22,7 @@ const Sidebar = ({
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { id: 'clients', label: 'Clienti', icon: <Users size={18} /> },
     { id: 'projects', label: 'Commesse', icon: <Briefcase size={18} /> },
+    { id: 'quotes', label: 'Preventivi (TEST)', icon: <FileText size={18} /> },
     { id: 'settings', label: 'Impostazioni', icon: <Settings size={18} /> },
   ]
 
@@ -150,14 +152,7 @@ const Sidebar = ({
         ))}
       </nav>
 
-      <div className="absolute bottom-10 left-0 right-0 px-6">
-        <div className={`p-6 rounded-[2.5rem] bg-slate-50 border border-white text-slate-400 shadow-sm transition-all duration-700 ${
-          isSidebarHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'
-        }`}>
-          <p className="text-[0.6rem] font-black uppercase tracking-[0.2em] opacity-60">Versione</p>
-          <p className="text-lg font-black tracking-tight mt-1 text-slate-800">1.0.0 PRO</p>
-        </div>
-      </div>
+
       
       </div>
     </aside>

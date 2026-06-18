@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { 
   Loader2, 
@@ -32,6 +32,27 @@ const ResourcesSettings = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [vehicleToDelete, setVehicleToDelete] = useState(null)
 
+  // Controlled form states
+  const [name, setName] = useState('')
+  const [cost, setCost] = useState(0.50)
+
+  useEffect(() => {
+    if (isDrawerOpen) {
+      setName(selectedVehicle?.name || '')
+      setCost(selectedVehicle?.km_cost !== undefined ? selectedVehicle.km_cost : 0.50)
+    }
+  }, [isDrawerOpen, selectedVehicle])
+
+  const isSaveDisabled = useMemo(() => {
+    const parsedCost = parseFloat(cost)
+    const isValid = name.trim() !== '' && !isNaN(parsedCost) && parsedCost >= 0
+    if (!isValid) return true
+    if (selectedVehicle) {
+      return name === selectedVehicle.name && parsedCost === selectedVehicle.km_cost
+    }
+    return false
+  }, [name, cost, selectedVehicle])
+
   const loadSettings = async () => {
     setLoading(true)
     try {
@@ -62,9 +83,9 @@ const ResourcesSettings = () => {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    const formData = new FormData(e.target)
-    const vehName = formData.get('name').trim()
-    const kmCost = parseFloat(formData.get('cost')) || 0.0
+    if (isSaveDisabled) return
+    const vehName = name.trim()
+    const kmCost = parseFloat(cost)
 
     if (!vehName) return
 
@@ -177,6 +198,7 @@ const ResourcesSettings = () => {
               subtitle={`Costo al km: € ${veh.km_cost.toFixed(2)} / km`}
               onEdit={() => { setSelectedVehicle(veh); setIsDrawerOpen(true); }}
               onDelete={() => { setVehicleToDelete(veh.name); setIsConfirmOpen(true); }}
+              onClick={() => { setSelectedVehicle(veh); setIsDrawerOpen(true); }}
               footerItems={[
                 { icon: <Euro size={12} />, label: `€ ${veh.km_cost.toFixed(2)} / km` }
               ]}
@@ -204,7 +226,8 @@ const ResourcesSettings = () => {
             <input 
               required
               name="name"
-              defaultValue={selectedVehicle?.name || ''}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               onFocus={(e) => setTimeout(() => e.target.select(), 0)}
               className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
             />
@@ -216,14 +239,20 @@ const ResourcesSettings = () => {
               type="number"
               step="0.01"
               name="cost"
-              defaultValue={selectedVehicle?.km_cost !== undefined ? selectedVehicle.km_cost : 0.50}
+              value={cost}
+              onChange={(e) => setCost(e.target.value === '' ? '' : parseFloat(e.target.value))}
               onFocus={(e) => setTimeout(() => e.target.select(), 0)}
               className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-accent/20 transition-all"
             />
           </div>
           <button 
             type="submit"
-            className="w-full py-4 bg-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-accent/20 hover:bg-accent/90 transition-all mt-4"
+            disabled={isSaveDisabled}
+            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all mt-4 ${
+              isSaveDisabled 
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+                : 'bg-accent text-white hover:bg-accent/90 shadow-xl shadow-accent/20'
+            }`}
           >
             {selectedVehicle ? 'Salva Modifiche' : 'Aggiungi Parco Mezzi'}
           </button>

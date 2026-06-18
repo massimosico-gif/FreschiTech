@@ -1,0 +1,979 @@
+import React, { useState, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
+import { motion } from 'framer-motion'
+import { 
+  FileSpreadsheet, 
+  Upload, 
+  Trash2, 
+  CheckCircle2, 
+  AlertCircle, 
+  Loader2, 
+  Info, 
+  Eye,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  List,
+  Edit,
+  Edit3,
+  Check,
+  X,
+  Briefcase
+} from 'lucide-react'
+import ConfirmModal from '../ui/ConfirmModal'
+import Select from '../ui/Select'
+
+const ImportListiniSettings = () => {
+  const [summary, setSummary] = useState({ total_count: 0, suppliers: [] })
+  const [loadingSummary, setLoadingSummary] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [selectedFilePath, setSelectedFilePath] = useState('')
+  const [clearExisting, setClearExisting] = useState(true)
+  const [status, setStatus] = useState({ type: '', message: '' })
+  const [isDragging, setIsDragging] = useState(false)
+  const [previewItems, setPreviewItems] = useState([])
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+
+  // Tab selector state
+  const [activeSettingsTab, setActiveSettingsTab] = useState('import') // 'import' or 'view'
+  
+  // States for viewing catalog list
+  const [catalogItems, setCatalogItems] = useState([])
+  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [catalogSupplier, setCatalogSupplier] = useState('all')
+  const [catalogSort, setCatalogSort] = useState({ field: 'code', direction: 'asc' })
+  const [catalogPage, setCatalogPage] = useState(1)
+  const [catalogLimit, setCatalogLimit] = useState(25)
+  const [totalCatalogCount, setTotalCatalogCount] = useState(0)
+
+  // Editing and confirmation states for individual catalog items
+  const [editingRowId, setEditingRowId] = useState(null)
+  const [editFormData, setEditFormData] = useState({
+    id: null,
+    code: '',
+    description: '',
+    unit: '',
+    unit_price: 0,
+    markup: 0,
+    supplier: ''
+  })
+  const [isRowSaveConfirmOpen, setIsRowSaveConfirmOpen] = useState(false)
+  const [rowToSave, setRowToSave] = useState(null)
+  const [isRowDeleteConfirmOpen, setIsRowDeleteConfirmOpen] = useState(false)
+  const [rowToDeleteId, setRowToDeleteId] = useState(null)
+
+  const loadSummary = async () => {
+    try {
+      setLoadingSummary(true)
+      const res = await invoke('get_catalog_summary')
+      setSummary(res)
+    } catch (err) {
+      console.error("Errore caricamento riepilogo catalogo:", err)
+      setStatus({ type: 'error', message: 'Errore caricamento catalogo: ' + err })
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSummary()
+
+    let active = true
+    let unlistenFn = null
+
+    const listenToDragDrop = async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window')
+        const currentWin = getCurrentWindow()
+
+        const unlisten = await currentWin.onDragDropEvent((event) => {
+          if (event.payload.type === 'hover') {
+            setIsDragging(true)
+          } else if (event.payload.type === 'cancel') {
+            setIsDragging(false)
+          } else if (event.payload.type === 'drop') {
+            setIsDragging(false)
+            if (event.payload.paths && event.payload.paths.length > 0) {
+              const filePath = event.payload.paths[0]
+              const ext = filePath.split('.').pop().toLowerCase()
+              if (['xlsx', 'xls', 'xlsm', 'xlsb', 'csv'].includes(ext)) {
+                setSelectedFilePath(filePath)
+                setStatus({ type: '', message: '' })
+              } else {
+                setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel o CSV.' })
+              }
+            }
+          }
+        })
+
+        if (!active) {
+          unlisten()
+        } else {
+          unlistenFn = unlisten
+        }
+      } catch (err) {
+        console.error("Errore inizializzazione drag-and-drop:", err)
+      }
+    }
+
+    listenToDragDrop()
+
+    return () => {
+      active = false
+      if (unlistenFn) {
+        unlistenFn()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedFilePath) {
+      const fetchPreview = async () => {
+        setLoadingPreview(true)
+        setPreviewItems([])
+        try {
+          const items = await invoke('get_catalog_preview', { filePath: selectedFilePath })
+          setPreviewItems(items)
+        } catch (err) {
+          console.error("Errore caricamento anteprima:", err)
+          setStatus({ type: 'error', message: 'Impossibile leggere l\'anteprima del file: ' + err })
+        } finally {
+          setLoadingPreview(false)
+        }
+      }
+      fetchPreview()
+    } else {
+      setPreviewItems([])
+    }
+  }, [selectedFilePath])
+
+  // Debounce per la ricerca del catalogo
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCatalogSearch(searchQuery)
+      setCatalogPage(1)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  const loadCatalogMaterials = async () => {
+    try {
+      setLoadingCatalog(true)
+      const offset = (catalogPage - 1) * catalogLimit
+      const res = await invoke('get_catalog_materials', {
+        search: catalogSearch,
+        supplier: catalogSupplier,
+        sortBy: catalogSort.field,
+        sortDesc: catalogSort.direction === 'desc',
+        limit: catalogLimit,
+        offset: offset
+      })
+      setCatalogItems(res.items || [])
+      setTotalCatalogCount(res.total_count || 0)
+    } catch (err) {
+      console.error("Errore caricamento materiali catalogo:", err)
+    } finally {
+      setLoadingCatalog(false)
+    }
+  }
+
+  // Ricarica i materiali quando cambiano i filtri o la pagina
+  useEffect(() => {
+    if (activeSettingsTab === 'view') {
+      loadCatalogMaterials()
+    }
+  }, [activeSettingsTab, catalogSearch, catalogSupplier, catalogSort, catalogPage, catalogLimit])
+
+  const handleCatalogSort = (field) => {
+    setCatalogSort(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+    setCatalogPage(1)
+  }
+
+  const CatalogSortIcon = ({ field }) => {
+    if (catalogSort.field !== field) return <ChevronsUpDown size={12} className="opacity-30 hover:opacity-100 transition-opacity" />;
+    return catalogSort.direction === 'asc' ? <ChevronUp size={12} className="text-teal-600" /> : <ChevronDown size={12} className="text-teal-600" />;
+  }
+
+  const handleStartEditRow = (item) => {
+    setEditingRowId(item.id)
+    setEditFormData({
+      id: item.id,
+      code: item.code || '',
+      description: item.description || '',
+      unit: item.unit || '',
+      unit_price: item.unit_price !== null && item.unit_price !== undefined ? item.unit_price : 0,
+      markup: item.markup !== null && item.markup !== undefined ? Math.round(item.markup * 100) : 0,
+      supplier: item.supplier || ''
+    })
+  }
+
+  const handleCancelEditRow = () => {
+    setEditingRowId(null)
+    setEditFormData({
+      id: null,
+      code: '',
+      description: '',
+      unit: '',
+      unit_price: 0,
+      markup: 0,
+      supplier: ''
+    })
+  }
+
+  const handleStartSaveRow = (formData) => {
+    setRowToSave(formData)
+    setIsRowSaveConfirmOpen(true)
+  }
+
+  const executeSaveRow = async () => {
+    if (!rowToSave) return
+    try {
+      const parsedPrice = rowToSave.unit_price !== '' ? parseFloat(rowToSave.unit_price) : 0.0
+      const parsedMarkup = rowToSave.markup !== '' ? parseFloat(rowToSave.markup) / 100.0 : 0.0
+      
+      const itemToSave = {
+        ...rowToSave,
+        unit_price: isNaN(parsedPrice) ? 0.0 : parsedPrice,
+        markup: isNaN(parsedMarkup) ? 0.0 : parsedMarkup
+      }
+      await invoke('save_catalog_material', { item: itemToSave })
+      setStatus({ type: 'success', message: 'Articolo aggiornato con successo!' })
+      setEditingRowId(null)
+      setRowToSave(null)
+      setIsRowSaveConfirmOpen(false)
+      loadCatalogMaterials()
+      loadSummary()
+    } catch (err) {
+      console.error("Errore salvataggio articolo:", err)
+      setStatus({ type: 'error', message: 'Errore durante il salvataggio: ' + err })
+    }
+  }
+
+  const handleStartDeleteRow = (id) => {
+    setRowToDeleteId(id)
+    setIsRowDeleteConfirmOpen(true)
+  }
+
+  const executeDeleteRow = async () => {
+    if (!rowToDeleteId) return
+    try {
+      await invoke('delete_catalog_material', { id: rowToDeleteId })
+      setStatus({ type: 'success', message: 'Articolo eliminato con successo!' })
+      setRowToDeleteId(null)
+      setIsRowDeleteConfirmOpen(false)
+      const totalPages = Math.ceil((totalCatalogCount - 1) / catalogLimit)
+      if (catalogPage > totalPages && totalPages > 0) {
+        setCatalogPage(totalPages)
+      } else {
+        loadCatalogMaterials()
+      }
+      loadSummary()
+    } catch (err) {
+      console.error("Errore eliminazione articolo:", err)
+      setStatus({ type: 'error', message: 'Errore durante l\'eliminazione: ' + err })
+    }
+  }
+
+  const handleSelectFile = async () => {
+    try {
+      setStatus({ type: '', message: '' })
+      const selected = await openFileDialog({
+        multiple: false,
+        filters: [{
+          name: 'File Listino (Excel, CSV)',
+          extensions: ['xlsx', 'xls', 'xlsm', 'xlsb', 'csv']
+        }]
+      })
+      if (selected) {
+        setSelectedFilePath(selected)
+      }
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Errore selezione file: ' + err })
+    }
+  }
+
+  const handleImport = async () => {
+    if (!selectedFilePath) return
+
+    setImporting(true)
+    setStatus({ type: '', message: '' })
+    try {
+      const count = await invoke('import_catalog_materials', {
+        filePath: selectedFilePath,
+        clearExisting: clearExisting
+      })
+      setStatus({ 
+        type: 'success', 
+        message: `Importazione completata! Aggiunti/aggiornati ${count} articoli.` 
+      })
+      setSelectedFilePath('')
+      loadSummary()
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Errore importazione: ' + err })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const handleClearCatalog = () => {
+    setIsConfirmOpen(true)
+  }
+
+  const executeClearCatalog = async () => {
+    setClearing(true)
+    setStatus({ type: '', message: '' })
+    try {
+      await invoke('clear_catalog_materials')
+      setStatus({ type: 'success', message: 'Catalogo svuotato con successo!' })
+      setCatalogItems([])
+      setTotalCatalogCount(0)
+      setCatalogPage(1)
+      loadSummary()
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Errore durante lo svuotamento: ' + err })
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  return (
+    <div className="space-y-8 animate-premium-in">
+      {/* Selettore Tab in alto */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-6">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Catalogo Materiali e Listini</h2>
+          <p className="text-[0.7rem] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">
+            {activeSettingsTab === 'import' ? 'Gestione caricamento e svuotamento catalogo' : 'Naviga, filtra e ordina gli articoli importati'}
+          </p>
+        </div>
+        
+        <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1 rounded-2xl border border-slate-200/50 shadow-sm shrink-0">
+          <button
+            onClick={() => setActiveSettingsTab('import')}
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+              activeSettingsTab === 'import' 
+                ? 'text-white' 
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Upload size={14} />
+            Importazione
+            {activeSettingsTab === 'import' && (
+              <motion.div
+                layoutId="activeSettingsTab"
+                className="absolute inset-0 bg-teal-600 rounded-xl -z-10 shadow-lg shadow-teal-600/10"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveSettingsTab('view')}
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+              activeSettingsTab === 'view' 
+                ? 'text-white' 
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <List size={14} />
+            Elenco Articoli
+            {activeSettingsTab === 'view' && (
+              <motion.div
+                layoutId="activeSettingsTab"
+                className="absolute inset-0 bg-teal-600 rounded-xl -z-10 shadow-lg shadow-teal-600/10"
+                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+              />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {status.message && (
+        <div className={`p-4 rounded-2xl flex items-center gap-4 ${
+          status.type === 'success' ? 'bg-teal-50 text-teal-600 border border-teal-100' : 'bg-red-50 text-red-500 border border-red-100'
+        }`}>
+          {status.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+          <span className="text-sm font-bold uppercase tracking-widest">{status.message}</span>
+        </div>
+      )}
+
+      {activeSettingsTab === 'import' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* CARICAMENTO FILE */}
+        <div className="lg:col-span-2 bg-white/40 backdrop-blur-md border border-white/60 p-10 rounded-[3rem] shadow-xl space-y-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-4 border-b border-slate-100 pb-6 mb-6">
+              <div className="p-3 bg-teal-100 text-teal-600 rounded-2xl">
+                <FileSpreadsheet size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Importazione Listini</h3>
+                <p className="text-xs font-bold text-slate-400">Importa i cataloghi materiali da fogli Excel (.xlsx) o CSV</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div 
+                className={`flex flex-col items-center justify-center py-10 rounded-[2.5rem] border transition-all duration-300 space-y-4 ${
+                  isDragging 
+                    ? 'bg-teal-50/80 border-dashed border-teal-400 scale-[1.02] shadow-inner' 
+                    : 'bg-slate-50/50 border-slate-100'
+                }`}
+              >
+                <div className={`p-6 rounded-3xl shadow-lg border border-slate-100/50 transition-all duration-300 ${
+                  isDragging ? 'bg-teal-500 text-white border-teal-400' : 'bg-white/80 text-teal-500'
+                }`}>
+                  <Upload size={40} className={isDragging ? 'animate-pulse' : 'animate-bounce'} />
+                </div>
+                <div className="text-center max-w-sm space-y-2">
+                  <h4 className="text-md font-black text-slate-800 uppercase tracking-tight">
+                    {isDragging 
+                      ? 'Rilascia il file qui' 
+                      : selectedFilePath 
+                        ? 'File Selezionato' 
+                        : 'Trascina o Seleziona un Listino'}
+                  </h4>
+                  <p className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-widest leading-relaxed px-4 break-all">
+                    {isDragging 
+                      ? 'Rilascia il file Excel o CSV per caricarlo.' 
+                      : selectedFilePath 
+                        ? selectedFilePath 
+                        : 'Trascina qui il file oppure fai click sotto per cercarlo.'}
+                  </p>
+                </div>
+                {!isDragging && (
+                  <button
+                    onClick={handleSelectFile}
+                    disabled={importing}
+                    className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.65rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    Sfoglia file...
+                  </button>
+                )}
+              </div>
+
+              {selectedFilePath && (
+                <div className="bg-slate-50/80 rounded-[2.5rem] p-6 border border-slate-100 space-y-6 animate-premium-in">
+                  {/* Anteprima dei dati */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                      <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Eye size={14} className="text-teal-600 animate-pulse" /> Anteprima Dati (Primi 5 articoli)
+                      </span>
+                      {loadingPreview ? (
+                        <span className="text-[0.65rem] font-bold text-slate-400 animate-pulse">Caricamento anteprima...</span>
+                      ) : previewItems.length > 0 ? (
+                        <span className="text-[0.65rem] font-black text-teal-600 uppercase tracking-widest bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 flex items-center gap-1 shadow-sm">
+                          <CheckCircle2 size={10} /> Struttura Rilevata
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {loadingPreview ? (
+                      <div className="flex flex-col items-center justify-center py-8 space-y-3 bg-white/40 backdrop-blur-sm border border-slate-100 rounded-2xl">
+                        <Loader2 size={24} className="animate-spin text-teal-600" />
+                        <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Lettura righe in corso...</span>
+                      </div>
+                    ) : previewItems.length > 0 ? (
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200/50 bg-white/80 shadow-sm">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100/50 border-b border-slate-200/50">
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Codice</th>
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Descrizione</th>
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center">U.M.</th>
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-right">Prezzo Unit.</th>
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-right">Ricarico</th>
+                              <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Fornitore</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {previewItems.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 font-mono break-all max-w-[120px]">
+                                  {item.code || <span className="text-slate-300 italic font-sans">N/D</span>}
+                                </td>
+                                <td className="py-2.5 px-4 text-[0.7rem] font-black text-slate-700 truncate max-w-[200px]" title={item.description}>
+                                  {item.description}
+                                </td>
+                                <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 text-center">
+                                  {item.unit || <span className="text-slate-300 italic">pz</span>}
+                                </td>
+                                <td className="py-2.5 px-4 text-[0.7rem] font-black text-slate-700 text-right">
+                                  {item.unit_price !== null && item.unit_price !== undefined 
+                                    ? `€ ${item.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                                    : '€ 0,00'}
+                                </td>
+                                <td className="py-2.5 px-4 text-[0.7rem] font-black text-slate-700 text-right">
+                                  {item.markup !== null && item.markup !== undefined
+                                    ? `${(item.markup * 100).toFixed(0)}%` 
+                                    : '0%'}
+                                </td>
+                                <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 uppercase tracking-tight truncate max-w-[100px]" title={item.supplier}>
+                                  {item.supplier || <span className="text-slate-300 italic">N/D</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-4 bg-amber-50 text-amber-600 border border-amber-100 rounded-2xl">
+                        <AlertCircle size={18} className="shrink-0" />
+                        <span className="text-[0.65rem] font-bold uppercase tracking-wider leading-relaxed">
+                          Nessun articolo valido estratto. Verifica che il file Excel o CSV contenga intestazioni corrette (es. Codice, Descrizione, Prezzo) e dati validi.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <input
+                      type="checkbox"
+                      id="clearExisting"
+                      checked={clearExisting}
+                      onChange={(e) => setClearExisting(e.target.checked)}
+                      className="w-5 h-5 accent-teal-600 rounded cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="clearExisting" className="text-[0.65rem] font-black uppercase tracking-wider text-slate-600 cursor-pointer select-none">
+                      Cancella catalogo esistente prima dell'importazione
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleImport}
+                    disabled={importing || loadingPreview}
+                    className="w-full flex items-center justify-center gap-2 h-14 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-teal-600/10 disabled:opacity-50"
+                  >
+                    {importing ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Elaborazione ed Importazione...
+                      </>
+                    ) : (
+                      'Avvia Importazione Catalogo'
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-slate-100 flex items-start gap-3 mt-6">
+            <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
+            <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest leading-normal">
+              Il sistema analizzerà automaticamente le intestazioni delle colonne del file. Si raccomanda di utilizzare nomi standard per le colonne: CODICE, DESCRIZIONE, UM, UNITARIO e FORNITORE.
+            </span>
+          </div>
+        </div>
+
+        {/* STATO CATALOGO */}
+        <div className="bg-white/40 backdrop-blur-md border border-white/60 p-10 rounded-[3rem] shadow-xl space-y-6 flex flex-col justify-between">
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
+              <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
+                <FileSpreadsheet size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Catalogo Attuale</h3>
+                <p className="text-xs font-bold text-slate-400">Riepilogo degli articoli e fornitori importati</p>
+              </div>
+            </div>
+
+            {loadingSummary ? (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <Loader2 size={32} className="animate-spin text-teal-600" />
+                <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Caricamento riepilogo...</span>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-[2rem] p-8 shadow-xl shadow-teal-500/10 space-y-1">
+                  <span className="text-[0.65rem] font-black uppercase tracking-widest text-teal-100">Articoli Totali in Database</span>
+                  <div className="text-4xl font-black">{summary.total_count.toLocaleString('it-IT')}</div>
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitori Rilevati ({summary.suppliers.length})</span>
+                  <div className="max-h-60 overflow-y-auto pr-1 space-y-2 no-scrollbar">
+                    {summary.suppliers.length === 0 ? (
+                      <div className="text-center py-8 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50 rounded-2xl border border-slate-100">
+                        Nessun articolo importato
+                      </div>
+                    ) : (
+                      summary.suppliers.map((s, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-white/60 p-4 rounded-xl border border-slate-100/50 shadow-sm">
+                          <span className="text-xs font-black text-slate-700 uppercase tracking-tight">{s.name}</span>
+                          <span className="text-xs font-bold text-slate-400">{s.count} art.</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {summary.total_count > 0 && (
+            <button
+              onClick={handleClearCatalog}
+              disabled={clearing}
+              className="w-full flex items-center justify-center gap-2 h-12 bg-red-50 hover:bg-red-100 text-red-500 rounded-2xl text-[0.65rem] font-black uppercase tracking-widest transition-all mt-6"
+            >
+              {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Svuota Catalogo Listini
+            </button>
+          )}
+      </div>
+    </div>
+  ) : (
+    <div className="bg-white/40 backdrop-blur-md border border-white/60 p-8 rounded-[3rem] shadow-xl space-y-6 animate-premium-in">
+      {/* Barra dei filtri */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex-1 w-full relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-teal-600 transition-colors" size={18} />
+          <input
+            type="text"
+            placeholder="Cerca per codice o descrizione..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-white/50 backdrop-blur-md border border-white/50 rounded-2xl py-3 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:bg-white transition-all w-full shadow-sm"
+          />
+        </div>
+        
+        <div className="w-full md:w-72">
+          <Select
+            options={[
+              { id: 'all', label: 'TUTTI I FORNITORI' },
+              ...summary.suppliers.map(s => {
+                const optionValue = s.name === 'Senza Fornitore' ? 'none' : s.name;
+                return { id: optionValue, label: `${s.name.toUpperCase()} (${s.count})` };
+              })
+            ]}
+            value={catalogSupplier}
+            onChange={(val) => {
+              setCatalogSupplier(val);
+              setCatalogPage(1);
+            }}
+            placeholder="Seleziona Fornitore"
+            icon={Briefcase}
+          />
+        </div>
+      </div>
+
+      {/* Tabella degli articoli */}
+      {loadingCatalog ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <Loader2 className="animate-spin text-teal-600" size={40} />
+          <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Lettura catalogo in corso...</span>
+        </div>
+      ) : catalogItems.length > 0 ? (
+        <div className="space-y-6">
+          <div className="overflow-x-auto rounded-[2rem] border border-slate-200/50 bg-white/80 shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-100/50 border-b border-slate-200/50">
+                  <th 
+                    onClick={() => handleCatalogSort('code')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Codice <CatalogSortIcon field="code" />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleCatalogSort('description')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Descrizione <CatalogSortIcon field="description" />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleCatalogSort('unit')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-center font-sans"
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      U.M. <CatalogSortIcon field="unit" />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleCatalogSort('unit_price')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      Prezzo Unit. <CatalogSortIcon field="unit_price" />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleCatalogSort('markup')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      Ricarico <CatalogSortIcon field="markup" />
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleCatalogSort('supplier')}
+                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Fornitore <CatalogSortIcon field="supplier" />
+                    </div>
+                  </th>
+                  <th className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider text-right font-sans">
+                    Azioni
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {catalogItems.map((item) => {
+                  const isEditing = item.id === editingRowId;
+                  return (
+                    <tr key={item.id} className={`${isEditing ? 'bg-teal-50/10' : 'hover:bg-slate-50/50'} transition-colors group`}>
+                      {isEditing ? (
+                        <>
+                          <td className="py-2 px-4 text-xs font-bold text-slate-600 font-mono">
+                            <input
+                              type="text"
+                              value={editFormData.code}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, code: e.target.value }))}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm"
+                              placeholder="Codice"
+                            />
+                          </td>
+                          <td className="py-2 px-4 text-xs font-black text-slate-800">
+                            <input
+                              type="text"
+                              value={editFormData.description}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm"
+                              placeholder="Descrizione"
+                              required
+                            />
+                          </td>
+                          <td className="py-2 px-4 text-xs font-bold text-slate-500 text-center">
+                            <input
+                              type="text"
+                              value={editFormData.unit}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, unit: e.target.value }))}
+                              className="w-16 bg-white border border-slate-200 rounded-xl px-2 py-2 text-xs font-bold text-slate-700 text-center focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm"
+                              placeholder="U.M."
+                            />
+                          </td>
+                          <td className="py-2 px-4 text-xs font-black text-slate-800 text-right">
+                            <div className="relative inline-block w-28">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">€</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editFormData.unit_price}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, unit_price: e.target.value }))}
+                                className="w-full bg-white border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-bold text-slate-700 text-right focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm font-mono"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-2 px-4 text-xs font-black text-emerald-600 text-right">
+                            <div className="relative inline-block w-20">
+                              <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={editFormData.markup}
+                                onClick={(e) => e.target.select()}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, markup: e.target.value }))}
+                                className="w-full bg-white border border-slate-200 rounded-xl pr-6 pl-2 py-2 text-xs font-bold text-slate-700 text-right focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm font-mono"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
+                            </div>
+                          </td>
+                          <td className="py-2 px-4 text-xs font-bold text-slate-500">
+                            <input
+                              type="text"
+                              value={editFormData.supplier}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, supplier: e.target.value }))}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-all shadow-sm"
+                              placeholder="Fornitore"
+                            />
+                          </td>
+                          <td className="py-2 px-4 text-xs font-bold text-slate-500 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handleStartSaveRow(editFormData)}
+                                className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-all shadow-sm"
+                                title="Salva"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                onClick={handleCancelEditRow}
+                                className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all shadow-sm"
+                                title="Annulla"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-4 px-6 text-xs font-bold text-slate-600 font-mono break-all max-w-[150px]">
+                            {item.code || <span className="text-slate-300 italic font-sans">N/D</span>}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-black text-slate-800 max-w-[300px] truncate" title={item.description}>
+                            {item.description}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-bold text-slate-500 text-center">
+                            {item.unit || <span className="text-slate-300 italic">pz</span>}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-black text-slate-800 text-right">
+                            € {item.unit_price !== null && item.unit_price !== undefined
+                              ? item.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : '0,00'}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-black text-emerald-600 text-right font-mono">
+                            {item.markup !== null && item.markup !== undefined
+                              ? `${Math.round(item.markup * 100)}%`
+                              : '0%'}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-tight max-w-[150px] truncate" title={item.supplier}>
+                            {item.supplier || <span className="text-slate-300 italic">N/D</span>}
+                          </td>
+                          <td className="py-4 px-6 text-xs font-bold text-slate-500 text-right">
+                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleStartEditRow(item)}
+                                className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Modifica"
+                              >
+                                <Edit3 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleStartDeleteRow(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Elimina"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+            <div className="flex items-center gap-3">
+              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Righe per pagina:</span>
+              <select
+                value={catalogLimit}
+                onChange={(e) => {
+                  setCatalogLimit(Number(e.target.value));
+                  setCatalogPage(1);
+                }}
+                className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-600 focus:outline-none shadow-sm cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="text-[0.65rem] font-bold text-slate-400">
+                Mostrati {Math.min(totalCatalogCount, (catalogPage - 1) * catalogLimit + 1)}-{Math.min(totalCatalogCount, catalogPage * catalogLimit)} di {totalCatalogCount}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCatalogPage(p => Math.max(1, p - 1))}
+                disabled={catalogPage === 1}
+                className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-xs font-black text-slate-700 px-3 uppercase tracking-wider">
+                Pagina {catalogPage} di {Math.ceil(totalCatalogCount / catalogLimit) || 1}
+              </span>
+              <button
+                onClick={() => setCatalogPage(p => Math.min(Math.ceil(totalCatalogCount / catalogLimit), p + 1))}
+                disabled={catalogPage >= Math.ceil(totalCatalogCount / catalogLimit)}
+                className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-[2.5rem] border border-dashed border-slate-200 text-center">
+          <div className="p-6 bg-slate-100 rounded-3xl text-slate-300 mb-4">
+            <FileSpreadsheet size={48} />
+          </div>
+          <h4 className="text-md font-black text-slate-700 uppercase tracking-tight">Nessun articolo trovato</h4>
+          <p className="text-sm font-bold text-slate-400 max-w-sm mt-1">
+            {catalogSearch || catalogSupplier !== 'all' 
+              ? 'Prova a modificare i tuoi filtri o la query di ricerca.' 
+              : 'Importa il tuo primo listino nella scheda "Importazione" per iniziare.'}
+          </p>
+        </div>
+      )}
+    </div>
+  )}
+
+  <ConfirmModal
+    isOpen={isConfirmOpen}
+    onClose={() => setIsConfirmOpen(false)}
+    onConfirm={executeClearCatalog}
+    title="Svuota Catalogo Listini"
+    message="Sei sicuro di voler svuotare completamente il catalogo dei listini? Questa azione è irreversibile e cancellerà tutti gli articoli caricati."
+    confirmText="Sì, svuota"
+    cancelText="Annulla"
+    type="danger"
+  />
+
+  <ConfirmModal
+    isOpen={isRowSaveConfirmOpen}
+    onClose={() => {
+      setIsRowSaveConfirmOpen(false)
+      setRowToSave(null)
+    }}
+    onConfirm={executeSaveRow}
+    title="Salva Modifica Articolo"
+    message="Confermi la modifica di questo articolo? Le modifiche verranno salvate nel catalogo."
+    confirmText="Sì, salva"
+    cancelText="Annulla"
+    type="warning"
+  />
+
+  <ConfirmModal
+    isOpen={isRowDeleteConfirmOpen}
+    onClose={() => {
+      setIsRowDeleteConfirmOpen(false)
+      setRowToDeleteId(null)
+    }}
+    onConfirm={executeDeleteRow}
+    title="Elimina Articolo"
+    message="Sei sicuro di voler eliminare questo articolo dal catalogo? Questa azione è irreversibile."
+    confirmText="Sì, elimina"
+    cancelText="Annulla"
+    type="danger"
+  />
+</div>
+)
+}
+
+export default ImportListiniSettings

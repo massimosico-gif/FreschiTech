@@ -7,12 +7,25 @@ import Jobs from './components/Jobs'
 import ProjectDetails from './components/ProjectDetails'
 import Team from './components/Team'
 import Settings from './components/Settings'
+import Quotes from './components/Quotes'
+import useProjectStore from './hooks/useProjectStore'
 
 const App = () => {
   const [view, setView] = useState('dashboard')
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [isSidebarHovered, setSidebarHovered] = useState(false)
   const [expandedItem, setExpandedItem] = useState(null)
+
+  const selectedCostCenterId = useProjectStore(s => s.selectedCostCenterId)
+
+  const getBgClass = () => {
+    if (view === 'project_details') {
+      return selectedCostCenterId 
+        ? 'bg-slate-900/5 border border-slate-900/5 backdrop-blur-xl shadow-inner' 
+        : 'bg-white/40 border border-white/40 backdrop-blur-md shadow-sm';
+    }
+    return 'border-transparent';
+  }
 
   const handleOpenProject = (id) => {
     console.log("App: Apertura progetto ID", id);
@@ -38,6 +51,8 @@ const App = () => {
         return <ProjectDetails projectId={selectedProjectId} onBack={() => setView('projects')} />;
       case 'settings':
         return <Settings />;
+      case 'quotes':
+        return <Quotes />;
       default:
         return (
           <div className="bg-white/40 backdrop-blur-md border border-white/50 rounded-3xl p-12 floating-card">
@@ -84,8 +99,10 @@ const App = () => {
         }}
       >
         <Header view={view} />
-        <div className="p-12 animate-fade-in">
-          {renderContent()}
+        <div className="p-8">
+          <div className={`transition-all duration-500 rounded-[2.5rem] ${view === 'project_details' ? 'p-10 border' : ''} ${getBgClass()} animate-fade-in`}>
+            {renderContent()}
+          </div>
         </div>
       </main>
     </div>

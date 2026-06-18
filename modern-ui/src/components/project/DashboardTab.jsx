@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Euro, Receipt, TrendingUp, BarChart3, AlertCircle } from 'lucide-react'
+import { Euro, Receipt, TrendingUp, BarChart3, AlertCircle, Percent } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import Card from '../ui/Card'
 import StatCard from '../ui/StatCard'
@@ -10,7 +10,12 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
 
   // Calcolo avanzamento basato sul budget (se presente)
   const progressPercent = stats.preventivoAccettato > 0 
-    ? Math.min(Math.round((stats.valoreLavori / stats.preventivoAccettato) * 100), 100) 
+    ? Math.round((stats.costoTotale / stats.preventivoAccettato) * 100) 
+    : 0;
+
+  // Calcolo scostamento rispetto al listino
+  const scostamentoPercent = stats.valoreLavori > 0
+    ? ((stats.preventivoAccettato - stats.valoreLavori) / stats.valoreLavori) * 100
     : 0;
 
   // Dati per il grafico a torta (ciambella)
@@ -64,30 +69,42 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
 
   return (
     <div className="space-y-10">
-      <div className="grid grid-cols-1 md:flex-row lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard 
-          label="Costo Totale" 
-          value={`€ ${stats.costoTotale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`} 
+          label="Costo Totale (Costi Vivi)" 
+          value={`€ ${stats.costoTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
           icon={Euro} 
           color="text-slate-600" 
         />
         <StatCard 
+          label="Valore Lavori (Listino)" 
+          value={`€ ${stats.valoreLavori.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+          icon={TrendingUp} 
+          color="text-indigo-600" 
+        />
+        <StatCard 
           label="Preventivo Accettato" 
-          value={`€ ${stats.preventivoAccettato.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`} 
+          value={`€ ${stats.preventivoAccettato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
           icon={Receipt} 
           color="text-sky-600" 
         />
         <StatCard 
-          label="Valore Lavori" 
-          value={`€ ${stats.valoreLavori.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`} 
-          icon={TrendingUp} 
-          color={`text-${brandColor}`} 
+          label="Utile su Preventivo" 
+          value={`€ ${stats.utile.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+          icon={BarChart3} 
+          color={stats.utile < 0 ? "text-rose-600" : "text-emerald-600"} 
         />
         <StatCard 
-          label="Utile Previsto" 
-          value={`€ ${stats.utile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`} 
+          label="Utile a Listino (Teorico)" 
+          value={`€ ${(stats.utileListino || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
           icon={BarChart3} 
-          color="text-emerald-600" 
+          color={(stats.utileListino || 0) < 0 ? "text-rose-600" : "text-teal-600"} 
+        />
+        <StatCard 
+          label="Scostamento da Listino" 
+          value={scostamentoPercent === 0 ? "Allineato" : `${scostamentoPercent > 0 ? '+' : ''}${scostamentoPercent.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} 
+          icon={Percent} 
+          color={scostamentoPercent === 0 ? "text-slate-500" : scostamentoPercent < 0 ? "text-amber-500" : "text-emerald-500"} 
         />
       </div>
 
@@ -130,7 +147,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value) => `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`}
+                    formatter={(value) => `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     contentStyle={{ 
                       backgroundColor: 'rgba(255, 255, 255, 0.9)', 
                       backdropFilter: 'blur(10px)',
@@ -184,7 +201,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
                 <div className="h-3 bg-white/20 group-hover:bg-current/10 rounded-full overflow-hidden transition-colors">
                   <div 
                     className="h-full bg-white group-hover:bg-current transition-all duration-1000"
-                    style={{ width: `${progressPercent}%` }}
+                    style={{ width: `${Math.min(progressPercent, 100)}%` }}
                   ></div>
                 </div>
               </div>
@@ -194,7 +211,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
                   <p className="text-xs font-bold leading-snug">
                     {progressPercent >= 100 
                       ? "Budget raggiunto o superato. Monitora l'utile."
-                      : "L'avanzamento riflette il valore dei lavori rispetto al preventivo."}
+                      : "L'avanzamento riflette la percentuale di budget consumata dai costi."}
                   </p>
                 </div>
               </div>
@@ -248,10 +265,10 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
                     {phaseData.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50">
                         <td className="py-3 px-4 font-black uppercase text-slate-800">{item.name}</td>
-                        <td className="py-3 px-4 text-right text-slate-500">€ {item.laborCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right text-slate-500">€ {item.materialCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right text-slate-500">€ {item.expenseCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right text-slate-900 font-black">€ {item.totalCost.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.laborCost.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.materialCost.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-500">€ {item.expenseCost.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right text-slate-900 font-black">€ {item.totalCost.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
                   </tbody>

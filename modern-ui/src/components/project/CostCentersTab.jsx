@@ -3,8 +3,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
 import Select from '../ui/Select'
+import ConfirmModal from '../ui/ConfirmModal'
 
 const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) => {
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
+  const [ccToDeleteId, setCcToDeleteId] = useState(null)
+
   const initialFilters = {
     search: '',
     category: 'all'
@@ -58,7 +62,7 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
       </div>
 
       {/* Toolbar Filtri CC */}
-      <div className="flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
+      <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
         <div className="flex-1 w-full space-y-2">
           <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Robot / Area</label>
           <div className="relative group">
@@ -110,11 +114,14 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
               badge={cc.category}
               badgeColor="bg-sky-50 text-sky-500"
               footerItems={[
-                { icon: <Euro size={14} />, label: `€ ${cc.base_cost.toLocaleString('it-IT')}` },
-                { icon: <Activity size={14} />, label: `${(cc.markup * 100).toFixed(0)}% Ric.` }
+                { icon: <Euro size={14} />, label: `Prev: € ${(cc.accepted_budget || 0).toLocaleString('it-IT')}` },
+                { icon: <Activity size={14} />, label: `Costo: € ${(cc.base_cost || 0).toLocaleString('it-IT')}` }
               ]}
               onEdit={() => onEdit(cc)}
-              onDelete={() => onDelete(cc.id)}
+              onDelete={() => {
+                setCcToDeleteId(cc.id)
+                setIsConfirmDeleteOpen(true)
+              }}
               onClick={() => onClickCard && onClickCard(cc.id)}
             />
           ))}
@@ -147,6 +154,26 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
           )}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={isConfirmDeleteOpen}
+        onClose={() => {
+          setIsConfirmDeleteOpen(false)
+          setCcToDeleteId(null)
+        }}
+        onConfirm={async () => {
+          if (ccToDeleteId) {
+            await onDelete(ccToDeleteId)
+          }
+          setIsConfirmDeleteOpen(false)
+          setCcToDeleteId(null)
+        }}
+        title="Elimina Centro di Costo"
+        message="Sei sicuro di voler eliminare definitivamente questo centro di costo? Tutti i materiali, la manodopera e le spese associate a questo centro perderanno questo riferimento."
+        confirmText="Elimina"
+        cancelText="Annulla"
+        type="danger"
+      />
     </div>
   )
 }

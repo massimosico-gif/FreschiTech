@@ -8,10 +8,7 @@ import {
   Activity,
   Euro,
   MapPin,
-  Globe,
-  WifiOff,
-  Loader2,
-  Navigation
+  Loader2
 } from 'lucide-react'
 import DrawerShell from './ui/DrawerShell'
 import ClientSelector from './ui/ClientSelector'
@@ -24,11 +21,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   const [initialData, setInitialData] = useState(null)
   const [clients, setClients] = useState([])
   
-  const [connectionStatus, setConnectionStatus] = useState('checking') // 'checking', 'online', 'offline'
-  const [isDistanceLoading, setIsDistanceLoading] = useState(false)
-  const [distanceError, setDistanceError] = useState('')
-  const [lastCalculatedAddress, setLastCalculatedAddress] = useState('')
-
   const autocompleteTimeoutRef = useRef(null)
   const [suggestions, setSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -84,7 +76,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     }))
     setSuggestions([])
     setShowSuggestions(false)
-    handleCalculateDistance(suggestion.display_name)
   }
 
   useEffect(() => {
@@ -94,128 +85,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
       }
     }
   }, [])
-
-  const checkInternet = async () => {
-    try {
-      if (!navigator.onLine) return false
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 4000)
-      
-      const response = await fetch('https://router.project-osrm.org/', {
-        method: 'HEAD',
-        mode: 'no-cors',
-        signal: controller.signal
-      })
-      clearTimeout(timeoutId)
-      return true
-    } catch (e) {
-      return false
-    }
-  }
-
-  const verifyConnection = async () => {
-    setConnectionStatus('checking')
-    const online = await checkInternet()
-    setConnectionStatus(online ? 'online' : 'offline')
-  }
-
-  useEffect(() => {
-    if (isOpen) {
-      verifyConnection()
-      setDistanceError('')
-    }
-  }, [isOpen])
-
-  const geocodeAddress = async (address) => {
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&email=freschitechsrl@pec.it`
-      const res = await fetch(url, {
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      if (data && data.length > 0) {
-        return {
-          lat: parseFloat(data[0].lat),
-          lon: parseFloat(data[0].lon)
-        }
-      }
-      return null
-    } catch (e) {
-      console.error('Geocoding error for address:', address, e)
-      return null
-    }
-  }
-
-  const getOSRMDistance = async (start, end) => {
-    try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${end.lon},${end.lat}?overview=false`
-      const res = await fetch(url)
-      if (!res.ok) return null
-      const data = await res.json()
-      if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
-        return data.routes[0].distance // meters
-      }
-      return null
-    } catch (e) {
-      console.error('OSRM routing error:', e)
-      return null
-    }
-  }
-
-  const handleCalculateDistance = async (customAddress) => {
-    const jobAddress = (typeof customAddress === 'string' ? customAddress : formData.address || '').trim()
-    if (!jobAddress) {
-      setDistanceError("Inserisci prima l'indirizzo della commessa per calcolare la distanza.")
-      return
-    }
-
-    setDistanceError('')
-    setIsDistanceLoading(true)
-
-    try {
-      const globalSettings = await invoke('get_global_settings')
-      const companyAddress = (globalSettings?.company_address || 'SALITA PERTOLDI 1/1 - 33010 - PAGNACCO (UD)').trim()
-
-      const companyCoords = await geocodeAddress(companyAddress)
-      if (!companyCoords) {
-        throw new Error("Impossibile geocodificare l'indirizzo dell'azienda.")
-      }
-
-      const clientCoords = await geocodeAddress(jobAddress)
-      if (!clientCoords) {
-        throw new Error("Impossibile geocodificare l'indirizzo del cantiere.")
-      }
-
-      const distanceMeters = await getOSRMDistance(companyCoords, clientCoords)
-      if (distanceMeters === null) {
-        throw new Error("Impossibile calcolare il tragitto stradale.")
-      }
-
-      const distanceKm = Math.round((distanceMeters / 1000) * 2)
-
-      setFormData(prev => ({
-        ...prev,
-        distance: distanceKm,
-        address: prev.address === jobAddress ? prev.address : jobAddress
-      }))
-      setLastCalculatedAddress(jobAddress)
-
-    } catch (err) {
-      console.error(err)
-      setDistanceError(err.message || 'Errore nel calcolo della distanza.')
-    } finally {
-      setIsDistanceLoading(false)
-    }
-  }
-
-  const getConnectionTitle = () => {
-    if (connectionStatus === 'checking') return 'Verifica della connessione in corso...'
-    if (connectionStatus === 'online') return 'Connesso a Internet. Pronto per il calcolo automatico.'
-    return 'Nessuna connessione a internet rilevata o server OSRM non raggiungibile.'
-  }
 
   const [formData, setFormData] = useState({
     client_id: '',
@@ -292,15 +161,14 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     const clientAddr = selectedClient 
       ? `${selectedClient.street || ''}, ${selectedClient.city || ''} ${selectedClient.province ? `(${selectedClient.province})` : ''}`.trim().replace(/^,\s*/, '').replace(/,\s*$/, '')
       : ''
+    const clientDistance = selectedClient ? selectedClient.distance : 0
     setFormData(prev => ({ 
       ...prev, 
       client_id: clientId,
-      address: prev.address ? prev.address : clientAddr
+      address: prev.address ? prev.address : clientAddr,
+      distance: clientDistance || 0
     }))
     validateField('client_id', clientId)
-    if (clientAddr) {
-      handleCalculateDistance(clientAddr)
-    }
   }
 
   const handleStatusChange = (status) => {
@@ -336,7 +204,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   const isClientMissing = !formData.client_id
   const isNotDirtyEdit = job && !isDirty
   const isSaveDisabled = isNameMissing || isClientMissing || isNotDirtyEdit
-  const needsCalculation = formData.address && formData.address.trim().toLowerCase() !== lastCalculatedAddress.trim().toLowerCase()
 
   useEffect(() => {
     if (isOpen) {
@@ -357,7 +224,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
         }
         setFormData(data)
         setInitialData(data)
-        setLastCalculatedAddress(job.address || '')
       } else {
         const newData = {
           client_id: '',
@@ -373,7 +239,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
         }
         setFormData(newData)
         setInitialData(newData)
-        setLastCalculatedAddress('')
       }
     }
   }, [isOpen, job])
@@ -445,21 +310,6 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
               {errors.name && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Preventivo Accettato (€)</label>
-              <div className="relative">
-                 <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                 <input 
-                  type="number"
-                  name="budget" 
-                  value={formData.budget} 
-                  onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                  placeholder="Es: 15000" 
-                />
-              </div>
-            </div>
-
             <div className="space-y-2 relative">
               <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Commessa / Cantiere</label>
               <div className="relative">
@@ -495,93 +345,19 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1 flex items-center justify-between">
-                  <span>Distanza Sede / Cantiere (km)</span>
-                  <div className="flex items-center gap-1.5" title={getConnectionTitle()}>
-                    {connectionStatus === 'checking' && (
-                      <span className="flex items-center gap-1 text-[0.6rem] font-bold text-slate-400">
-                        <Loader2 size={10} className="animate-spin text-slate-400" />
-                        Verifica...
-                      </span>
-                    )}
-                    {connectionStatus === 'online' && (
-                      <span className="flex items-center gap-1 text-[0.6rem] font-bold text-emerald-500">
-                        <Globe size={10} className="animate-pulse" />
-                        Online
-                      </span>
-                    )}
-                    {connectionStatus === 'offline' && (
-                      <button 
-                        type="button" 
-                        onClick={verifyConnection}
-                        className="flex items-center gap-1 text-[0.6rem] font-bold text-rose-500 hover:underline"
-                      >
-                        <WifiOff size={10} />
-                        Offline (Riprova)
-                      </button>
-                    )}
-                  </div>
-                </label>
-                <div className="relative flex items-center">
-                   <MapPin className="absolute left-5 text-slate-400" size={18} />
-                   <input 
-                    type="number"
-                    name="distance" 
-                    value={formData.distance} 
-                    onChange={handleChange} 
-                    onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                    className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-28 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                    placeholder="Es: 45" 
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCalculateDistance}
-                    disabled={isDistanceLoading || !formData.address || connectionStatus !== 'online'}
-                    className={`absolute right-2 px-4 py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                      isDistanceLoading
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : !formData.address || connectionStatus !== 'online'
-                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                      : needsCalculation
-                      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md animate-pulse active:scale-95'
-                      : 'bg-accent/10 hover:bg-accent/20 text-accent active:scale-95'
-                    }`}
-                  >
-                    {isDistanceLoading ? (
-                      <>
-                        <Loader2 size={12} className="animate-spin text-accent" />
-                        Calcolo...
-                      </>
-                    ) : (
-                      <>
-                        <Navigation size={12} />
-                        Calcola
-                      </>
-                    )}
-                  </button>
-                </div>
-                {distanceError && (
-                  <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1">
-                    <AlertCircle size={10} /> {distanceError}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Costo al Km (€/km)</label>
-                <div className="relative">
-                   <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                   <input 
-                    type="number"
-                    step="0.01"
-                    name="km_cost" 
-                    value={formData.km_cost} 
-                    onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
-                    className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
-                    placeholder="Es: 0.50" 
-                  />
-                </div>
+            <div className="space-y-2">
+              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
+              <div className="relative">
+                 <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                 <input 
+                  type="number"
+                  name="distance" 
+                  value={formData.distance} 
+                  onChange={handleChange} 
+                  onFocus={(e) => setTimeout(() => e.target.select(), 0)} 
+                  className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm"
+                  placeholder="Es: 45" 
+                />
               </div>
             </div>
           </section>

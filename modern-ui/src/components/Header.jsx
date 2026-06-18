@@ -5,6 +5,7 @@ const Header = ({ view }) => {
     switch(view) {
       case 'dashboard': return 'Dashboard'
       case 'settings': return 'Impostazioni'
+      case 'quotes': return 'Preventivi (Fase di Test)'
       default: return view.replace('_', ' ')
     }
   }
@@ -18,9 +19,6 @@ const Header = ({ view }) => {
         <h2 className="text-2xl font-black capitalize text-[#0f172a] tracking-tight">
           {getBreadcrumb()}
         </h2>
-      </div>
-      <div className="glass-panel px-6 py-2 rounded-full shadow-sm text-[0.7rem] font-black uppercase tracking-widest text-[#64748b]">
-        v1.0 Modern UI
       </div>
     </header>
   )
