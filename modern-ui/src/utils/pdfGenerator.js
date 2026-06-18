@@ -150,7 +150,7 @@ const addFooterPageNumbers = (doc) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 export const generateClientPdf = (project, client, costCenters, materials, labor, expenses) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
   
   // Draw header
   const headerBoxHeight = drawHeader(doc, "PROFORMA RIEPILOGATIVO COMMESSA", project, client, false);
@@ -256,7 +256,7 @@ export const generateClientPdf = (project, client, costCenters, materials, labor
 // ═══════════════════════════════════════════════════════════════════════
 
 export const generateInternalPdf = (project, client, costCenters, materials, labor, expenses) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
   
   // Draw header
   const headerBoxHeight = drawHeader(doc, "REPORT INTERNO MARGINALITÀ COMMESSA", project, client, true);
