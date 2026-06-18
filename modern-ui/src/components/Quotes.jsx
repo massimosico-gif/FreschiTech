@@ -175,7 +175,7 @@ const Quotes = () => {
       code: material.code || '',
       description: material.description,
       unit: material.unit || 'pz',
-      unit_price: material.unit_price || 0,
+      unit_price: Math.round((material.unit_price || 0) * 100) / 100,
       markup: material.markup !== undefined ? material.markup : 0.25
     }))
     setCatalogSuggestions([])
@@ -303,7 +303,7 @@ const Quotes = () => {
       code: newRowData.code || '',
       description: newRowData.description.trim(),
       unit: newRowData.unit || 'pz',
-      unit_price: newRowData.unit_price,
+      unit_price: Math.round(newRowData.unit_price * 100) / 100,
       quantity: newRowData.quantity,
       markup: newRowData.markup
     }
@@ -368,7 +368,11 @@ const Quotes = () => {
 
   const handleSaveEditItem = async () => {
     if (!inlineItemFormData || !inlineItemFormData.description.trim()) return
-    const updatedItems = quoteItems.map((item, i) => i === editingItemIndex ? inlineItemFormData : item)
+    const roundedItem = {
+      ...inlineItemFormData,
+      unit_price: Math.round(inlineItemFormData.unit_price * 100) / 100
+    }
+    const updatedItems = quoteItems.map((item, i) => i === editingItemIndex ? roundedItem : item)
     setQuoteItems(updatedItems)
     setEditingItemIndex(null)
     setInlineItemFormData(null)
@@ -845,6 +849,7 @@ const Quotes = () => {
                   type="number" 
                   value={newRowData.unit_price}
                   onChange={(e) => setNewRowData(p => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))}
+                  onBlur={(e) => setNewRowData(p => ({ ...p, unit_price: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 }))}
                   onFocus={handleInputSelect}
                   onClick={handleInputSelect}
                   min="0"
@@ -977,6 +982,7 @@ const Quotes = () => {
                               type="number" 
                               value={inlineItemFormData.unit_price} 
                               onChange={(e) => handleInlineItemFieldChange('unit_price', e.target.value)}
+                              onBlur={(e) => handleInlineItemFieldChange('unit_price', Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
                               onFocus={handleInputSelect}
                               onClick={handleInputSelect}
                               className="w-full bg-white border border-slate-200 rounded-xl pl-6 pr-2 py-2 text-right text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-accent"
