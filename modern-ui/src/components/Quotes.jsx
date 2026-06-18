@@ -307,12 +307,17 @@ const Quotes = () => {
       markup: newRowData.markup
     }
 
-    // Check for duplicate by code (if code is not empty) or description
+    // Check for duplicate by code (if code is not empty) or description with safe fallback
     const existingIndex = quoteItems.findIndex(item => {
-      if (newItem.code && item.code) {
-        return item.code.toLowerCase().trim() === newItem.code.toLowerCase().trim()
+      const newCode = (newItem.code || '').toLowerCase().trim()
+      const existingCode = (item.code || '').toLowerCase().trim()
+      const newDesc = (newItem.description || '').toLowerCase().trim()
+      const existingDesc = (item.description || '').toLowerCase().trim()
+
+      if (newCode && existingCode) {
+        return newCode === existingCode
       }
-      return item.description.toLowerCase().trim() === newItem.description.toLowerCase().trim()
+      return newDesc === existingDesc
     })
 
     if (existingIndex !== -1) {
