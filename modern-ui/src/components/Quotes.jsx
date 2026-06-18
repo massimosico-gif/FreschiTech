@@ -235,7 +235,7 @@ const Quotes = () => {
       return item
     })
     setQuoteItems(updatedItems)
-    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+    setDuplicateModal(prev => ({ ...prev, isOpen: false }))
     
     // Reset addition data
     setNewRowData({
@@ -269,7 +269,7 @@ const Quotes = () => {
       return item
     })
     setQuoteItems(updatedItems)
-    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+    setDuplicateModal(prev => ({ ...prev, isOpen: false }))
     
     // Reset addition data
     setNewRowData({
@@ -292,7 +292,7 @@ const Quotes = () => {
     if (!newItem) return
 
     await proceedAddRow(newItem)
-    setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })
+    setDuplicateModal(prev => ({ ...prev, isOpen: false }))
   }
 
   // Push newRowData as a row item inside quoteItems
@@ -1241,7 +1241,7 @@ const Quotes = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })}
+                  onClick={() => setDuplicateModal(prev => ({ ...prev, isOpen: false }))}
                   className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                 />
                 
@@ -1257,7 +1257,7 @@ const Quotes = () => {
                       <AlertTriangle size={24} />
                     </div>
                     <button 
-                      onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })} 
+                      onClick={() => setDuplicateModal(prev => ({ ...prev, isOpen: false }))} 
                       className="p-2 text-slate-300 hover:text-slate-500 transition-colors"
                     >
                       <X size={20} />
@@ -1276,10 +1276,10 @@ const Quotes = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3">
+                   <div className="flex flex-col gap-3">
                     <button
                       onClick={handleDuplicateAdd}
-                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20 cursor-pointer animate-none"
+                      className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-700/20 cursor-pointer animate-none"
                     >
                       Somma quantità (+{duplicateModal.newItem.quantity} {duplicateModal.existingItem.unit} = {duplicateModal.existingItem.quantity + duplicateModal.newItem.quantity})
                     </button>
@@ -1290,13 +1290,7 @@ const Quotes = () => {
                       Sovrascrivi quantità (diventa {duplicateModal.newItem.quantity} {duplicateModal.newItem.unit})
                     </button>
                     <button
-                      onClick={handleDuplicateCreateNew}
-                      className="w-full py-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all cursor-pointer"
-                    >
-                      Aggiungi come riga separata
-                    </button>
-                    <button
-                      onClick={() => setDuplicateModal({ isOpen: false, newItem: null, existingIndex: null, existingItem: null })}
+                      onClick={() => setDuplicateModal(prev => ({ ...prev, isOpen: false }))}
                       className="w-full py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all cursor-pointer"
                     >
                       Annulla inserimento
