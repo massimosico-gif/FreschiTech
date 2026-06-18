@@ -1279,7 +1279,7 @@ const Quotes = () => {
                    <div className="flex flex-col gap-3">
                     <button
                       onClick={handleDuplicateAdd}
-                      className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-700/20 cursor-pointer animate-none"
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20 cursor-pointer animate-none"
                     >
                       Somma quantità (+{duplicateModal.newItem.quantity} {duplicateModal.existingItem.unit} = {duplicateModal.existingItem.quantity + duplicateModal.newItem.quantity})
                     </button>
