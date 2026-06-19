@@ -16,7 +16,7 @@ const ProjectHeader = ({
 }) => {
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 w-full overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 font-sans">
             <ArrowLeft size={16} className="text-slate-400 mr-1" />
@@ -66,10 +66,10 @@ const ProjectHeader = ({
         </div>
   
         {/* Tab Navigation & Actions */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 w-full lg:w-auto overflow-hidden min-w-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
           {/* PDF Buttons */}
           {onExportClientPdf && onExportInternalPdf && (
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-2">
               <button
                 onClick={onExportClientPdf}
                 className="flex items-center gap-2 px-4 py-3 bg-white/80 hover:bg-white text-indigo-600 border border-slate-100 hover:border-slate-200 rounded-xl text-[0.65rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer"
@@ -91,12 +91,12 @@ const ProjectHeader = ({
   
           {/* Tab Navigation */}
           {tabs && tabs.length > 0 && (
-            <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm overflow-x-auto max-w-full whitespace-nowrap min-w-0">
+            <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 shrink-0 ${
+                  className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
                     activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
