@@ -91,12 +91,12 @@ const ProjectHeader = ({
   
           {/* Tab Navigation */}
           {tabs && tabs.length > 0 && (
-            <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm">
+            <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-white/50 shadow-sm overflow-x-auto max-w-full whitespace-nowrap">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+                  className={`relative flex items-center gap-2 px-5 py-3 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 shrink-0 ${
                     activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
