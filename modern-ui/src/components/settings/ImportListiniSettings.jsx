@@ -46,6 +46,7 @@ const ImportListiniSettings = () => {
   const [pdfImporting, setPdfImporting] = useState(false)
   const [pdfPreviewItems, setPdfPreviewItems] = useState([])
   const [loadingPdfPreview, setLoadingPdfPreview] = useState(false)
+  const [pdfMappings, setPdfMappings] = useState([])
 
   // Tab selector state
   const [activeSettingsTab, setActiveSettingsTab] = useState('import') // 'import' or 'view'
@@ -173,14 +174,14 @@ const ImportListiniSettings = () => {
         setLoadingPdfPreview(true)
         setPdfPreviewItems([])
         try {
-          // Simulate loading PDF items (actual implementation later)
+          // Simulate loading PDF items (descriptions and prices only, no codes)
           await new Promise(resolve => setTimeout(resolve, 1500))
           setPdfPreviewItems([
-            { code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.85, supplier: 'Fornitore Generico' },
-            { code: 'SCAT-PT6', description: 'Scatola derivazione PT6 da incasso con coperchio', unit: 'pz', unit_price: 4.20, supplier: 'Fornitore Generico' },
-            { code: 'INT-BIPT16', description: 'Interruttore bipolare 16A compatibile serie civile', unit: 'pz', unit_price: 7.90, supplier: 'Fornitore Generico' },
-            { code: 'TUB-RK15-20', description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
-            { code: 'PLAF-LED-30W', description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
+            { description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.85, supplier: 'Fornitore Generico' },
+            { description: 'Scatola derivazione PT6 da incasso con coperchio', unit: 'pz', unit_price: 4.20, supplier: 'Fornitore Generico' },
+            { description: 'Interruttore bipolare 16A compatibile serie civile', unit: 'pz', unit_price: 7.90, supplier: 'Fornitore Generico' },
+            { description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
+            { description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
           ])
         } catch (err) {
           console.error("Errore caricamento anteprima PDF:", err)
@@ -194,6 +195,52 @@ const ImportListiniSettings = () => {
       setPdfPreviewItems([])
     }
   }, [selectedPdfPath])
+
+  useEffect(() => {
+    if (pdfPreviewItems.length > 0) {
+      const defaultMappings = pdfPreviewItems.map((item, idx) => {
+        let suggestedItem = null
+        let matchScore = 0
+        let action = 'ignore'
+
+        if (idx === 0) {
+          suggestedItem = { id: 101, code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.72 }
+          matchScore = 95
+          action = 'update'
+        } else if (idx === 1) {
+          suggestedItem = { id: 102, code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', unit: 'pz', unit_price: 3.90 }
+          matchScore = 88
+          action = 'update'
+        } else if (idx === 2) {
+          suggestedItem = { id: 103, code: 'INT-BIPT16', description: 'Interruttore bipolare 16A', unit: 'pz', unit_price: 7.20 }
+          matchScore = 84
+          action = 'update'
+        } else if (idx === 3) {
+          suggestedItem = { id: 104, code: 'TUB-RK15-20', description: 'Tubo corrugato RK15 d20', unit: 'm', unit_price: 0.38 }
+          matchScore = 79
+          action = 'update'
+        } else if (idx === 4) {
+          // Low similarity or not found
+          suggestedItem = null
+          matchScore = 0
+          action = 'create'
+        }
+
+        return {
+          id: idx,
+          pdfItem: item,
+          suggestedItem,
+          matchScore,
+          action, // 'update', 'create', 'ignore'
+          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null,
+          customCode: idx === 4 ? 'PLAF-LED-30W-NEW' : ''
+        }
+      })
+      setPdfMappings(defaultMappings)
+    } else {
+      setPdfMappings([])
+    }
+  }, [pdfPreviewItems])
 
   // Debounce per la ricerca del catalogo
   useEffect(() => {
@@ -394,10 +441,11 @@ const ImportListiniSettings = () => {
     try {
       // Simulate database update
       await new Promise(resolve => setTimeout(resolve, 2000))
-      const count = pdfPreviewItems.length
+      // Filter out ignored mappings
+      const processed = pdfMappings.filter(m => m.action !== 'ignore')
       setStatus({ 
         type: 'success', 
-        message: `Aggiornamento da PDF completato! Aggiunti/aggiornati ${count} articoli nel listino.` 
+        message: `Aggiornamento da PDF completato! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${pdfMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${pdfMappings.filter(m => m.action === 'create').length}).` 
       })
       setSelectedPdfPath('')
       loadSummary()
@@ -406,6 +454,29 @@ const ImportListiniSettings = () => {
     } finally {
       setPdfImporting(false)
     }
+  }
+
+  const handleUpdateMappingAction = (rowId, action) => {
+    setPdfMappings(prev => prev.map(m => {
+      if (m.id === rowId) {
+        let suggestedItem = m.suggestedItem
+        // Default mock suggestion if switching back to 'update'
+        if (action === 'update' && !suggestedItem) {
+          suggestedItem = { id: 105, code: 'NEW-MOCK-CODE', description: m.pdfItem.description, unit: m.pdfItem.unit, unit_price: 10.00 }
+        }
+        return {
+          ...m,
+          action,
+          suggestedItem,
+          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null
+        }
+      }
+      return m
+    }))
+  }
+
+  const handleCustomCodeChange = (rowId, val) => {
+    setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, customCode: val } : m))
   }
 
   const handleClearCatalog = () => {
@@ -735,36 +806,98 @@ const ImportListiniSettings = () => {
                           <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Estrazione testi e tabelle...</span>
                         </div>
                       ) : pdfPreviewItems.length > 0 ? (
-                        <div className="overflow-x-auto rounded-2xl border border-slate-200/50 bg-white/80 shadow-sm">
+                        <div className="overflow-x-auto rounded-3xl border border-slate-200/50 bg-white/95 shadow-md p-2">
                           <table className="w-full text-left border-collapse">
                             <thead>
                               <tr className="bg-slate-100/50 border-b border-slate-200/50">
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Codice</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Descrizione</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center">U.M.</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-right">Costo unitario</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Provenienza</th>
+                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-1/3">Articolo Estratto (PDF)</th>
+                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center w-1/4">Azione</th>
+                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-5/12">Associazione Catalogo</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {pdfPreviewItems.map((item, idx) => (
-                                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                  <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 font-mono break-all max-w-[120px]">
-                                    {item.code || <span className="text-slate-300 italic font-sans">N/D</span>}
+                              {pdfMappings.map((m) => (
+                                <tr key={m.id} className="hover:bg-slate-50/30 transition-colors">
+                                  {/* Articolo PDF */}
+                                  <td className="py-4 px-4 space-y-1">
+                                    <div className="text-xs font-black text-slate-800 leading-tight">
+                                      {m.pdfItem.description}
+                                    </div>
+                                    <div className="flex gap-2 text-[0.65rem] font-bold text-slate-400">
+                                      <span>UM: {m.pdfItem.unit || 'pz'}</span>
+                                      <span>•</span>
+                                      <span className="text-indigo-600">Prezzo PDF: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
                                   </td>
-                                  <td className="py-2.5 px-4 text-[0.7rem] font-black text-slate-700 truncate max-w-[200px]" title={item.description}>
-                                    {item.description}
+
+                                  {/* Azione Selector */}
+                                  <td className="py-4 px-4 text-center">
+                                    <select
+                                      value={m.action}
+                                      onChange={(e) => handleUpdateMappingAction(m.id, e.target.value)}
+                                      className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-[0.65rem] font-black uppercase tracking-widest text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer"
+                                    >
+                                      <option value="update">Associa Esistente</option>
+                                      <option value="create">Crea Nuovo</option>
+                                      <option value="ignore">Ignora Vooce</option>
+                                    </select>
                                   </td>
-                                  <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 text-center">
-                                    {item.unit || <span className="text-slate-300 italic">pz</span>}
-                                  </td>
-                                  <td className="py-2.5 px-4 text-[0.7rem] font-black text-slate-700 text-right">
-                                    {item.unit_price !== null && item.unit_price !== undefined 
-                                      ? `€ ${item.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                                      : '€ 0,00'}
-                                  </td>
-                                  <td className="py-2.5 px-4 text-[0.7rem] font-bold text-slate-500 uppercase tracking-tight truncate max-w-[100px]" title={item.supplier}>
-                                    {item.supplier || <span className="text-slate-300 italic">N/D</span>}
+
+                                  {/* Associazione Catalogo */}
+                                  <td className="py-4 px-4">
+                                    {m.action === 'update' && m.suggestedItem && (
+                                      <div className="space-y-1.5 animate-premium-in">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`px-2 py-0.5 rounded-full text-[0.55rem] font-black border uppercase tracking-wider ${
+                                            m.matchScore >= 90
+                                              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                              : 'bg-amber-50 text-amber-600 border-amber-100'
+                                          }`}>
+                                            Match {m.matchScore}%
+                                          </span>
+                                          <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            {m.suggestedItem.code}
+                                          </span>
+                                        </div>
+                                        <div className="text-[0.7rem] font-semibold text-slate-500 truncate max-w-[220px]" title={m.suggestedItem.description}>
+                                          {m.suggestedItem.description}
+                                        </div>
+                                        <div className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">
+                                          Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
+                                          <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {m.action === 'update' && !m.suggestedItem && (
+                                      <div className="text-xs font-bold text-rose-500 flex items-center gap-1.5">
+                                        <AlertCircle size={14} /> Nessuna corrispondenza. Seleziona Crea Nuovo o Associa.
+                                      </div>
+                                    )}
+
+                                    {m.action === 'create' && (
+                                      <div className="space-y-1.5 animate-premium-in">
+                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-full text-[0.55rem] font-black uppercase tracking-wider">
+                                          Nuovo Articolo
+                                        </span>
+                                        <div className="space-y-1">
+                                          <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Codice Articolo:</label>
+                                          <input
+                                            type="text"
+                                            value={m.customCode}
+                                            onChange={(e) => handleCustomCodeChange(m.id, e.target.value)}
+                                            placeholder="Inserisci codice..."
+                                            className="w-full bg-white border border-slate-200 rounded-xl py-1 px-2.5 text-[0.65rem] font-bold text-slate-700 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {m.action === 'ignore' && (
+                                      <div className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest italic">
+                                        L'articolo non verrà importato
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
