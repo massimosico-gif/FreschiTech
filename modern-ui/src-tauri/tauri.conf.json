@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "FreschiTech",
-  "version": "1.1.20",
+  "version": "1.1.27",
   "identifier": "com.freschitech.app",
   "build": {
     "frontendDist": "../dist",

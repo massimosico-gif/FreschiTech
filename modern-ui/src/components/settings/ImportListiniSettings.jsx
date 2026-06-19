@@ -47,6 +47,9 @@ const ImportListiniSettings = () => {
   const [pdfPreviewItems, setPdfPreviewItems] = useState([])
   const [loadingPdfPreview, setLoadingPdfPreview] = useState(false)
   const [pdfMappings, setPdfMappings] = useState([])
+  const [isXmlFile, setIsXmlFile] = useState(false)
+  const [rowSearchResults, setRowSearchResults] = useState({})
+  const [rowSearchQueries, setRowSearchQueries] = useState({})
 
   // Tab selector state
   const [activeSettingsTab, setActiveSettingsTab] = useState('import') // 'import' or 'view'
@@ -77,6 +80,7 @@ const ImportListiniSettings = () => {
   const [rowToSave, setRowToSave] = useState(null)
   const [isRowDeleteConfirmOpen, setIsRowDeleteConfirmOpen] = useState(false)
   const [rowToDeleteId, setRowToDeleteId] = useState(null)
+  const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
 
   const loadSummary = async () => {
     try {
@@ -116,12 +120,12 @@ const ImportListiniSettings = () => {
                 setSelectedFilePath(filePath)
                 setSelectedPdfPath('')
                 setStatus({ type: '', message: '' })
-              } else if (ext === 'pdf') {
+              } else if (ext === 'pdf' || ext === 'xml') {
                 setSelectedPdfPath(filePath)
                 setSelectedFilePath('')
                 setStatus({ type: '', message: '' })
               } else {
-                setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel, CSV o PDF.' })
+                setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel, CSV, PDF o XML.' })
               }
             }
           }
@@ -174,18 +178,49 @@ const ImportListiniSettings = () => {
         setLoadingPdfPreview(true)
         setPdfPreviewItems([])
         try {
-          // Simulate loading PDF items (descriptions and prices only, no codes)
-          await new Promise(resolve => setTimeout(resolve, 1500))
-          setPdfPreviewItems([
-            { description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.85, supplier: 'Fornitore Generico' },
-            { description: 'Scatola derivazione PT6 da incasso con coperchio', unit: 'pz', unit_price: 4.20, supplier: 'Fornitore Generico' },
-            { description: 'Interruttore bipolare 16A compatibile serie civile', unit: 'pz', unit_price: 7.90, supplier: 'Fornitore Generico' },
-            { description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
-            { description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
-          ])
+          const ext = selectedPdfPath.split('.').pop().toLowerCase()
+          if (ext === 'xml') {
+            setIsXmlFile(true)
+            const rows = await invoke('parse_invoice_xml', { filePath: selectedPdfPath })
+            const preview = rows.map(r => ({
+              description: r.invoice_item.description,
+              unit: r.invoice_item.unit,
+              unit_price: r.invoice_item.unit_price,
+              supplier: 'MARCHIOL S.P.A.'
+            }))
+            setPdfPreviewItems(preview)
+            
+            const formattedMappings = rows.map(r => ({
+              id: r.id,
+              pdfItem: {
+                description: r.invoice_item.description,
+                unit: r.invoice_item.unit,
+                unit_price: r.invoice_item.unit_price,
+                supplier: 'MARCHIOL S.P.A.'
+              },
+              suggestedItem: r.suggested_item,
+              matchScore: r.match_score,
+              action: r.action,
+              selectedCatalogItemId: r.selected_catalog_item_id,
+              customCode: r.custom_code,
+              invoiceItem: r.invoice_item
+            }))
+            setPdfMappings(formattedMappings)
+          } else {
+            setIsXmlFile(false)
+            // Simulate loading PDF items (descriptions and prices only, no codes)
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            setPdfPreviewItems([
+              { description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.85, supplier: 'Fornitore Generico' },
+              { description: 'Scatola derivazione PT6 da incasso con coperchio', unit: 'pz', unit_price: 4.20, supplier: 'Fornitore Generico' },
+              { description: 'Interruttore bipolare 16A compatibile serie civile', unit: 'pz', unit_price: 7.90, supplier: 'Fornitore Generico' },
+              { description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
+              { description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
+            ])
+          }
         } catch (err) {
-          console.error("Errore caricamento anteprima PDF:", err)
-          setStatus({ type: 'error', message: 'Impossibile leggere l\'anteprima del PDF: ' + err })
+          console.error("Errore caricamento anteprima:", err)
+          setStatus({ type: 'error', message: 'Impossibile leggere il file: ' + err })
         } finally {
           setLoadingPdfPreview(false)
         }
@@ -197,7 +232,7 @@ const ImportListiniSettings = () => {
   }, [selectedPdfPath])
 
   useEffect(() => {
-    if (pdfPreviewItems.length > 0) {
+    if (pdfPreviewItems.length > 0 && !isXmlFile) {
       const defaultMappings = pdfPreviewItems.map((item, idx) => {
         let suggestedItem = null
         let matchScore = 0
@@ -237,10 +272,10 @@ const ImportListiniSettings = () => {
         }
       })
       setPdfMappings(defaultMappings)
-    } else {
+    } else if (pdfPreviewItems.length === 0) {
       setPdfMappings([])
     }
-  }, [pdfPreviewItems])
+  }, [pdfPreviewItems, isXmlFile])
 
   // Debounce per la ricerca del catalogo
   useEffect(() => {
@@ -420,8 +455,8 @@ const ImportListiniSettings = () => {
       const selected = await openFileDialog({
         multiple: false,
         filters: [{
-          name: 'Listino PDF',
-          extensions: ['pdf']
+          name: 'Fattura PDF o XML',
+          extensions: ['pdf', 'xml']
         }]
       })
       if (selected) {
@@ -429,28 +464,56 @@ const ImportListiniSettings = () => {
         setSelectedFilePath('')
       }
     } catch (err) {
-      setStatus({ type: 'error', message: 'Errore selezione file PDF: ' + err })
+      setStatus({ type: 'error', message: 'Errore selezione file: ' + err })
     }
   }
 
-  const handleImportPdf = async () => {
+  const handleImportPdf = () => {
     if (!selectedPdfPath) return
+    setIsImportConfirmOpen(true)
+  }
 
+  const executeImportPdf = async () => {
+    setIsImportConfirmOpen(false)
     setPdfImporting(true)
     setStatus({ type: '', message: '' })
     try {
-      // Simulate database update
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      // Filter out ignored mappings
-      const processed = pdfMappings.filter(m => m.action !== 'ignore')
-      setStatus({ 
-        type: 'success', 
-        message: `Aggiornamento da PDF completato! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${pdfMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${pdfMappings.filter(m => m.action === 'create').length}).` 
-      })
+      const ext = selectedPdfPath.split('.').pop().toLowerCase()
+      if (ext === 'xml') {
+        const rustMappings = pdfMappings.map(m => ({
+          id: m.id,
+          invoice_item: m.invoiceItem,
+          suggested_item: m.suggestedItem,
+          match_score: m.matchScore,
+          action: m.action,
+          selected_catalog_item_id: m.selectedCatalogItemId,
+          custom_code: m.customCode
+        }))
+        
+        await invoke('import_invoice_mappings', {
+          mappings: rustMappings,
+          supplier: 'MARCHIOL S.P.A.'
+        })
+        
+        const processed = rustMappings.filter(m => m.action !== 'ignore')
+        setStatus({ 
+          type: 'success', 
+          message: `Importazione XML completata con successo! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${rustMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${rustMappings.filter(m => m.action === 'create').length}).` 
+        })
+      } else {
+        // Simulate database update for PDF
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const processed = pdfMappings.filter(m => m.action !== 'ignore')
+        setStatus({ 
+          type: 'success', 
+          message: `Aggiornamento da PDF completato! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${pdfMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${pdfMappings.filter(m => m.action === 'create').length}).` 
+        })
+      }
       setSelectedPdfPath('')
       loadSummary()
     } catch (err) {
-      setStatus({ type: 'error', message: 'Errore importazione PDF: ' + err })
+      console.error("Errore importazione:", err)
+      setStatus({ type: 'error', message: 'Errore importazione: ' + err })
     } finally {
       setPdfImporting(false)
     }
@@ -477,6 +540,36 @@ const ImportListiniSettings = () => {
 
   const handleCustomCodeChange = (rowId, val) => {
     setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, customCode: val } : m))
+  }
+
+  const handleSearchAlternativeCatalogItem = async (rowId, query) => {
+    setRowSearchQueries(prev => ({ ...prev, [rowId]: query }))
+    if (query.trim().length < 2) {
+      setRowSearchResults(prev => ({ ...prev, [rowId]: [] }))
+      return
+    }
+    try {
+      const results = await invoke('search_catalog_materials', { query })
+      setRowSearchResults(prev => ({ ...prev, [rowId]: results }))
+    } catch (err) {
+      console.error("Errore ricerca alternativa catalogo:", err)
+    }
+  }
+
+  const handleSelectAlternativeItem = (rowId, item) => {
+    setPdfMappings(prev => prev.map(m => {
+      if (m.id === rowId) {
+        return {
+          ...m,
+          suggestedItem: item,
+          selectedCatalogItemId: item.id,
+          matchScore: 100
+        }
+      }
+      return m
+    }))
+    setRowSearchResults(prev => ({ ...prev, [rowId]: [] }))
+    setRowSearchQueries(prev => ({ ...prev, [rowId]: '' }))
   }
 
   const handleClearCatalog = () => {
@@ -738,8 +831,8 @@ const ImportListiniSettings = () => {
                   <FileText size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aggiornamento da PDF</h3>
-                  <p className="text-xs font-bold text-slate-400">Aggiorna e modifica il listino esistente caricando un file PDF</p>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aggiornamento da PDF / XML</h3>
+                  <p className="text-xs font-bold text-slate-400">Aggiorna e modifica il listino esistente caricando un file PDF o XML (Fattura Elettronica)</p>
                 </div>
               </div>
 
@@ -759,17 +852,17 @@ const ImportListiniSettings = () => {
                   <div className="text-center max-w-sm space-y-2">
                     <h4 className="text-md font-black text-slate-800 uppercase tracking-tight">
                       {isDragging 
-                        ? 'Rilascia il file PDF qui' 
+                        ? 'Rilascia il file qui' 
                         : selectedPdfPath 
-                          ? 'Documento PDF Selezionato' 
-                          : 'Trascina o Seleziona un PDF'}
+                          ? 'Documento Selezionato' 
+                          : 'Trascina o Seleziona un file'}
                     </h4>
                     <p className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-widest leading-relaxed px-4 break-all">
                       {isDragging 
-                        ? 'Rilascia il file PDF per caricarlo.' 
+                        ? 'Rilascia il file PDF o XML per caricarlo.' 
                         : selectedPdfPath 
                           ? selectedPdfPath 
-                          : 'Trascina qui il file PDF oppure fai click sotto per cercarlo.'}
+                          : 'Trascina qui il file PDF/XML oppure fai click sotto per cercarlo.'}
                     </p>
                   </div>
                   {!isDragging && (
@@ -778,7 +871,7 @@ const ImportListiniSettings = () => {
                       disabled={pdfImporting}
                       className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.65rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
                     >
-                      Sfoglia PDF...
+                      Sfoglia file...
                     </button>
                   )}
                 </div>
@@ -792,7 +885,7 @@ const ImportListiniSettings = () => {
                           <Eye size={14} className="text-indigo-600 animate-pulse" /> Anteprima Articoli PDF Rilevati
                         </span>
                         {loadingPdfPreview ? (
-                          <span className="text-[0.65rem] font-bold text-slate-400 animate-pulse">Analisi del PDF in corso...</span>
+                          <span className="text-[0.65rem] font-bold text-slate-400 animate-pulse">Analisi del file in corso...</span>
                         ) : pdfPreviewItems.length > 0 ? (
                           <span className="text-[0.65rem] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 flex items-center gap-1 shadow-sm">
                             <CheckCircle2 size={10} /> Articoli Estratti
@@ -810,14 +903,19 @@ const ImportListiniSettings = () => {
                           <table className="w-full text-left border-collapse">
                             <thead>
                               <tr className="bg-slate-100/50 border-b border-slate-200/50">
-                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-1/3">Articolo Estratto (PDF)</th>
+                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-1/3">Articolo Estratto ({isXmlFile ? 'XML' : 'PDF'})</th>
                                 <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center w-1/4">Azione</th>
                                 <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-5/12">Associazione Catalogo</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {pdfMappings.map((m) => (
-                                <tr key={m.id} className="hover:bg-slate-50/30 transition-colors">
+                              {pdfMappings.map((m) => {
+                                const isSearching = rowSearchResults[m.id] && rowSearchResults[m.id].length > 0;
+                                return (
+                                  <tr 
+                                    key={m.id} 
+                                    className={`hover:bg-slate-50/30 transition-colors ${isSearching ? 'relative z-[30]' : 'relative z-0'}`}
+                                  >
                                   {/* Articolo PDF */}
                                   <td className="py-4 px-4 space-y-1">
                                     <div className="text-xs font-black text-slate-800 leading-tight">
@@ -826,52 +924,180 @@ const ImportListiniSettings = () => {
                                     <div className="flex gap-2 text-[0.65rem] font-bold text-slate-400">
                                       <span>UM: {m.pdfItem.unit || 'pz'}</span>
                                       <span>•</span>
-                                      <span className="text-indigo-600">Prezzo PDF: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                      <span className="text-indigo-600">Prezzo {isXmlFile ? 'XML' : 'PDF'}: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                   </td>
 
                                   {/* Azione Selector */}
                                   <td className="py-4 px-4 text-center">
-                                    <select
-                                      value={m.action}
-                                      onChange={(e) => handleUpdateMappingAction(m.id, e.target.value)}
-                                      className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-[0.65rem] font-black uppercase tracking-widest text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer"
-                                    >
-                                      <option value="update">Associa Esistente</option>
-                                      <option value="create">Crea Nuovo</option>
-                                      <option value="ignore">Ignora Vooce</option>
-                                    </select>
+                                    <div className="flex flex-col sm:flex-row gap-1.5 justify-center items-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateMappingAction(m.id, 'update')}
+                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
+                                          m.action === 'update'
+                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                                        }`}
+                                      >
+                                        Associa
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateMappingAction(m.id, 'create')}
+                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
+                                          m.action === 'create'
+                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                                        }`}
+                                      >
+                                        Crea
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateMappingAction(m.id, 'ignore')}
+                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
+                                          m.action === 'ignore'
+                                            ? 'bg-slate-600 border-slate-600 text-white shadow-md shadow-slate-600/20'
+                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                                        }`}
+                                      >
+                                        Ignora
+                                      </button>
+                                    </div>
                                   </td>
 
                                   {/* Associazione Catalogo */}
                                   <td className="py-4 px-4">
                                     {m.action === 'update' && m.suggestedItem && (
-                                      <div className="space-y-1.5 animate-premium-in">
-                                        <div className="flex items-center gap-2">
-                                          <span className={`px-2 py-0.5 rounded-full text-[0.55rem] font-black border uppercase tracking-wider ${
-                                            m.matchScore >= 90
-                                              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                              : 'bg-amber-50 text-amber-600 border-amber-100'
-                                          }`}>
-                                            Match {m.matchScore}%
-                                          </span>
-                                          <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
-                                            {m.suggestedItem.code}
-                                          </span>
+                                      <div className="space-y-2 animate-premium-in">
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className={`px-2 py-0.5 rounded-full text-[0.55rem] font-black border uppercase tracking-wider ${
+                                              m.matchScore >= 90
+                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                : 'bg-amber-50 text-amber-600 border-amber-100'
+                                            }`}>
+                                              Match {m.matchScore}%
+                                            </span>
+                                            <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                              {m.suggestedItem.code}
+                                            </span>
+                                          </div>
+                                          <div className="text-[0.7rem] font-semibold text-slate-500 truncate max-w-[220px]" title={m.suggestedItem.description}>
+                                            {m.suggestedItem.description}
+                                          </div>
+                                          <div className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">
+                                            Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
+                                            <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
+                                          </div>
                                         </div>
-                                        <div className="text-[0.7rem] font-semibold text-slate-500 truncate max-w-[220px]" title={m.suggestedItem.description}>
-                                          {m.suggestedItem.description}
-                                        </div>
-                                        <div className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">
-                                          Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
-                                          <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
+
+                                        {/* Input di ricerca per cambiare associazione */}
+                                        <div className="relative">
+                                          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+                                            <Search size={12} className="text-slate-400" />
+                                            <input
+                                              type="text"
+                                              value={rowSearchQueries[m.id] || ''}
+                                              onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
+                                              placeholder="Cerca altro codice o desc..."
+                                              className="w-full bg-transparent text-[0.65rem] font-bold text-slate-700 focus:outline-none placeholder-slate-400"
+                                            />
+                                            {(rowSearchQueries[m.id] || '') && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
+                                                  setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
+                                                }}
+                                                className="text-slate-400 hover:text-slate-600"
+                                              >
+                                                <X size={12} />
+                                              </button>
+                                            )}
+                                          </div>
+                                          {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
+                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                              {rowSearchResults[m.id].map((res) => (
+                                                <button
+                                                  key={res.id}
+                                                  type="button"
+                                                  onClick={() => handleSelectAlternativeItem(m.id, res)}
+                                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
+                                                >
+                                                  <div className="flex justify-between items-center">
+                                                    <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1 py-0.2 rounded">
+                                                      {res.code}
+                                                    </span>
+                                                    <span className="text-[0.6rem] text-indigo-600 font-bold">
+                                                      € {res.unit_price.toFixed(2)}
+                                                    </span>
+                                                  </div>
+                                                  <div className="text-[0.65rem] font-semibold text-slate-500 truncate">
+                                                    {res.description}
+                                                  </div>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     )}
 
                                     {m.action === 'update' && !m.suggestedItem && (
-                                      <div className="text-xs font-bold text-rose-500 flex items-center gap-1.5">
-                                        <AlertCircle size={14} /> Nessuna corrispondenza. Seleziona Crea Nuovo o Associa.
+                                      <div className="space-y-2 animate-premium-in">
+                                        <div className="text-xs font-bold text-rose-500 flex items-center gap-1.5">
+                                          <AlertCircle size={14} /> Nessuna corrispondenza automatica.
+                                        </div>
+                                        <div className="relative">
+                                          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+                                            <Search size={12} className="text-slate-400" />
+                                            <input
+                                              type="text"
+                                              value={rowSearchQueries[m.id] || ''}
+                                              onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
+                                              placeholder="Cerca nel catalogo per codice o desc..."
+                                              className="w-full bg-transparent text-[0.65rem] font-bold text-slate-700 focus:outline-none placeholder-slate-400"
+                                            />
+                                            {(rowSearchQueries[m.id] || '') && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
+                                                  setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
+                                                }}
+                                                className="text-slate-400 hover:text-slate-600"
+                                              >
+                                                <X size={12} />
+                                              </button>
+                                            )}
+                                          </div>
+                                          {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
+                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                              {rowSearchResults[m.id].map((res) => (
+                                                <button
+                                                  key={res.id}
+                                                  type="button"
+                                                  onClick={() => handleSelectAlternativeItem(m.id, res)}
+                                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
+                                                >
+                                                  <div className="flex justify-between items-center">
+                                                    <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1 py-0.2 rounded">
+                                                      {res.code}
+                                                    </span>
+                                                    <span className="text-[0.6rem] text-indigo-600 font-bold">
+                                                      € {res.unit_price.toFixed(2)}
+                                                    </span>
+                                                  </div>
+                                                  <div className="text-[0.65rem] font-semibold text-slate-500 truncate">
+                                                    {res.description}
+                                                  </div>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     )}
 
@@ -900,7 +1126,7 @@ const ImportListiniSettings = () => {
                                     )}
                                   </td>
                                 </tr>
-                              ))}
+                              ); })}
                             </tbody>
                           </table>
                         </div>
@@ -914,10 +1140,10 @@ const ImportListiniSettings = () => {
                     >
                       {pdfImporting ? (
                         <>
-                          <Loader2 size={18} className="animate-spin" /> Elaborazione ed Importazione PDF...
+                          <Loader2 size={18} className="animate-spin" /> Elaborazione ed Importazione {isXmlFile ? 'XML' : 'PDF'}...
                         </>
                       ) : (
-                        'Avvia Aggiornamento Listino da PDF'
+                        isXmlFile ? 'Avvia Aggiornamento Listino da XML' : 'Avvia Aggiornamento Listino da PDF'
                       )}
                     </button>
                   </div>
@@ -1008,6 +1234,7 @@ const ImportListiniSettings = () => {
         
         <div className="w-full md:w-72">
           <Select
+            searchable={true}
             options={[
               { id: 'all', label: 'TUTTI I FORNITORI' },
               ...summary.suppliers.map(s => {
@@ -1301,6 +1528,17 @@ const ImportListiniSettings = () => {
     confirmText="Sì, svuota"
     cancelText="Annulla"
     type="danger"
+  />
+
+  <ConfirmModal
+    isOpen={isImportConfirmOpen}
+    onClose={() => setIsImportConfirmOpen(false)}
+    onConfirm={executeImportPdf}
+    title={isXmlFile ? "Conferma Aggiornamento Listino da XML" : "Conferma Aggiornamento Listino da PDF"}
+    message={isXmlFile ? "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file XML della fattura?" : "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file PDF?"}
+    confirmText="Sì, procedi"
+    cancelText="Annulla"
+    type="warning"
   />
 
   <ConfirmModal

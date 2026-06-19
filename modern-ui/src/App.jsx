@@ -41,7 +41,7 @@ const App = () => {
       case 'dashboard':
         return <Dashboard />;
       case 'clients':
-        return <Clients />;
+        return <Clients onOpenProject={handleOpenProject} />;
       case 'team':
         console.log("App: Caricamento componente Team...");
         return <Team />;

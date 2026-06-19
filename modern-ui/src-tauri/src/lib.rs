@@ -354,7 +354,9 @@ pub fn run() {
         commands::get_quotes,
         commands::save_quote,
         commands::get_quote_details,
-        commands::delete_quote
+        commands::delete_quote,
+        commands::parse_invoice_xml,
+        commands::import_invoice_mappings
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

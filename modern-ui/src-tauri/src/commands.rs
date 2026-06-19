@@ -1292,6 +1292,20 @@ pub struct CatalogMaterial {
     pub markup: Option<f64>,
 }
 
+impl CatalogMaterial {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(CatalogMaterial {
+            id: Some(row.get(0)?),
+            code: row.get(1)?,
+            description: row.get(2)?,
+            unit: row.get(3)?,
+            unit_price: row.get(4)?,
+            supplier: row.get(5)?,
+            markup: row.get(6)?,
+        })
+    }
+}
+
 #[tauri::command]
 pub fn get_catalog_summary() -> Result<serde_json::Value, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1492,6 +1506,7 @@ pub fn search_catalog_materials(query: String) -> Result<Vec<CatalogMaterial>, S
     let conn = get_connection().map_err(|e| e.to_string())?;
     let search_pattern = format!("%{}%", query);
     
+    // 1. Cerca prima per codice
     let mut stmt = conn.prepare("
         SELECT MIN(id) as id, code, description, unit, unit_price, supplier, markup
         FROM (
@@ -1499,13 +1514,13 @@ pub fn search_catalog_materials(query: String) -> Result<Vec<CatalogMaterial>, S
             UNION
             SELECT NULL as id, code, description, unit, unit_price, supplier, markup FROM materials
         )
-        WHERE code LIKE ? OR description LIKE ?
+        WHERE code LIKE ?
         GROUP BY code, description, unit, unit_price, supplier, markup
-        ORDER BY description ASC
+        ORDER BY code ASC
         LIMIT 20
     ").map_err(|e| e.to_string())?;
     
-    let iter = stmt.query_map([&search_pattern, &search_pattern], |row| {
+    let iter = stmt.query_map([&search_pattern], |row| {
         Ok(CatalogMaterial {
             id: row.get(0)?,
             code: row.get(1)?,
@@ -1521,6 +1536,39 @@ pub fn search_catalog_materials(query: String) -> Result<Vec<CatalogMaterial>, S
     for item in iter {
         results.push(item.map_err(|e| e.to_string())?);
     }
+    
+    // 2. Se non viene trovato alcun codice, passa alla ricerca per descrizione
+    if results.is_empty() {
+        let mut stmt_desc = conn.prepare("
+            SELECT MIN(id) as id, code, description, unit, unit_price, supplier, markup
+            FROM (
+                SELECT id, code, description, unit, unit_price, supplier, markup FROM catalog_materials
+                UNION
+                SELECT NULL as id, code, description, unit, unit_price, supplier, markup FROM materials
+            )
+            WHERE description LIKE ?
+            GROUP BY code, description, unit, unit_price, supplier, markup
+            ORDER BY description ASC
+            LIMIT 20
+        ").map_err(|e| e.to_string())?;
+        
+        let iter_desc = stmt_desc.query_map([&search_pattern], |row| {
+            Ok(CatalogMaterial {
+                id: row.get(0)?,
+                code: row.get(1)?,
+                description: row.get(2)?,
+                unit: row.get(3)?,
+                unit_price: row.get(4)?,
+                supplier: row.get(5)?,
+                markup: row.get(6)?,
+            })
+        }).map_err(|e| e.to_string())?;
+        
+        for item in iter_desc {
+            results.push(item.map_err(|e| e.to_string())?);
+        }
+    }
+    
     Ok(results)
 }
 
@@ -2102,6 +2150,297 @@ pub fn delete_quote(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_quote] ID: {}", id);
     let conn = get_connection().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM quotes WHERE id=?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ==========================================
+// CUSTOM REGEX-LESS XML PARSER FOR INVOICES
+// ==========================================
+
+fn extract_tag(content: &str, tag_name: &str) -> Option<String> {
+    let mut start = 0;
+    while let Some(pos) = content[start..].find('<') {
+        let absolute_pos = start + pos;
+        if let Some(tag_end_offset) = content[absolute_pos..].find('>') {
+            let tag_end = absolute_pos + tag_end_offset;
+            let full_start_tag = &content[absolute_pos + 1..tag_end];
+            let tag_name_part = full_start_tag.split(' ').next()?;
+            let actual_name = tag_name_part.split(':').last()?;
+            
+            if actual_name == tag_name {
+                let content_start = tag_end + 1;
+                let mut end_pos_search = content_start;
+                while let Some(end_offset) = content[end_pos_search..].find("</") {
+                    let end_pos = end_pos_search + end_offset;
+                    if let Some(end_tag_close_offset) = content[end_pos..].find('>') {
+                        let end_tag_close = end_pos + end_tag_close_offset;
+                        let end_tag_part = content[end_pos + 2..end_tag_close].split(' ').next()?.split(':').last()?;
+                        if end_tag_part == tag_name {
+                            return Some(content[content_start..end_pos].trim().to_string());
+                        }
+                        end_pos_search = end_pos + 2;
+                    } else {
+                        break;
+                    }
+                }
+                return None;
+            }
+            start = absolute_pos + 1;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+fn extract_all_blocks(content: &str, tag_name: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut start = 0;
+    while let Some(pos) = content[start..].find('<') {
+        let absolute_pos = start + pos;
+        if let Some(tag_end_offset) = content[absolute_pos..].find('>') {
+            let tag_end = absolute_pos + tag_end_offset;
+            let full_start_tag = &content[absolute_pos + 1..tag_end];
+            let tag_name_part = match full_start_tag.split(' ').next() {
+                Some(p) => p,
+                None => { start = absolute_pos + 1; continue; }
+            };
+            let actual_name = match tag_name_part.split(':').last() {
+                Some(n) => n,
+                None => { start = absolute_pos + 1; continue; }
+            };
+            
+            if actual_name == tag_name {
+                let content_start = tag_end + 1;
+                let mut end_pos_search = content_start;
+                let mut found = false;
+                while let Some(end_offset) = content[end_pos_search..].find("</") {
+                    let end_pos = end_pos_search + end_offset;
+                    if let Some(end_tag_close_offset) = content[end_pos..].find('>') {
+                        let end_tag_close = end_pos + end_tag_close_offset;
+                        let end_tag_part = match content[end_pos + 2..end_tag_close].split(' ').next() {
+                            Some(p) => match p.split(':').last() {
+                                Some(n) => n,
+                                None => ""
+                            },
+                            None => ""
+                        };
+                        if end_tag_part == tag_name {
+                            blocks.push(content[content_start..end_pos].trim().to_string());
+                            start = end_tag_close + 1;
+                            found = true;
+                            break;
+                        }
+                        end_pos_search = end_pos + 2;
+                    } else {
+                        break;
+                    }
+                }
+                if !found {
+                    start = absolute_pos + 1;
+                }
+            } else {
+                start = absolute_pos + 1;
+            }
+        } else {
+            break;
+        }
+    }
+    blocks
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct XmlInvoiceItem {
+    pub line_number: String,
+    pub code_alternativo: Option<String>,
+    pub code_produttore: Option<String>,
+    pub description: String,
+    pub quantity: f64,
+    pub unit: String,
+    pub unit_price: f64,
+    pub total_price: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct XmlMappingRow {
+    pub id: usize,
+    pub invoice_item: XmlInvoiceItem,
+    pub suggested_item: Option<CatalogMaterial>,
+    pub match_score: i32,
+    pub action: String, // "update", "create", "ignore"
+    pub selected_catalog_item_id: Option<i64>,
+    pub custom_code: String,
+}
+
+#[tauri::command]
+pub fn parse_invoice_xml(file_path: String) -> Result<Vec<XmlMappingRow>, String> {
+    log::info!("CMD [parse_invoice_xml] file_path: {}", file_path);
+    let xml_content = std::fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let conn = get_connection().map_err(|e| e.to_string())?;
+    
+    // Estrazione del fornitore (CedentePrestatore)
+    let cedente_blocks = extract_all_blocks(&xml_content, "CedentePrestatore");
+    let _supplier_name = if !cedente_blocks.is_empty() {
+        extract_tag(&cedente_blocks[0], "Denominazione").unwrap_or_else(|| "Fornitore Generico".to_string())
+    } else {
+        "Fornitore Generico".to_string()
+    };
+    
+    let dettaglio_linee = extract_all_blocks(&xml_content, "DettaglioLinee");
+    let mut mappings = Vec::new();
+    
+    for (idx, block) in dettaglio_linee.iter().enumerate() {
+        let line_num = extract_tag(block, "NumeroLinea").unwrap_or_else(|| (idx + 1).to_string());
+        let description = extract_tag(block, "Descrizione").unwrap_or_default();
+        
+        let quantity_str = extract_tag(block, "Quantita").unwrap_or_default();
+        let quantity: f64 = quantity_str.parse().unwrap_or(0.0);
+        
+        let unit = extract_tag(block, "UnitaMisura").unwrap_or_default();
+        
+        let unit_price_str = extract_tag(block, "PrezzoUnitario").unwrap_or_default();
+        let unit_price: f64 = unit_price_str.parse().unwrap_or(0.0);
+        
+        let total_price_str = extract_tag(block, "PrezzoTotale").unwrap_or_default();
+        let total_price: f64 = total_price_str.parse().unwrap_or(0.0);
+        
+        // Estrarre codici articolo
+        let cod_blocks = extract_all_blocks(block, "CodiceArticolo");
+        let mut code_alternativo = None;
+        let mut code_produttore = None;
+        
+        for cb in cod_blocks {
+            let ct = extract_tag(&cb, "CodiceTipo").unwrap_or_default();
+            let cv = extract_tag(&cb, "CodiceValore").unwrap_or_default();
+            if ct == "CODICE ALTERNATIVO" {
+                code_alternativo = Some(cv);
+            } else if ct == "CODICE PRODUTTORE" {
+                code_produttore = Some(cv);
+            }
+        }
+        
+        let invoice_item = XmlInvoiceItem {
+            line_number: line_num,
+            code_alternativo: code_alternativo.clone(),
+            code_produttore: code_produttore.clone(),
+            description: description.clone(),
+            quantity,
+            unit: unit.clone(),
+            unit_price,
+            total_price,
+        };
+        
+        // Riconciliazione (matching) nel database listino (catalog_materials)
+        let mut suggested_item: Option<CatalogMaterial> = None;
+        let mut match_score = 0;
+        let mut action = "create".to_string();
+        
+        let mut search_codes = Vec::new();
+        if let Some(ref alt) = code_alternativo {
+            search_codes.push(alt.clone());
+        }
+        if let Some(ref prod) = code_produttore {
+            search_codes.push(prod.clone());
+        }
+        
+        if !search_codes.is_empty() {
+            // Cerchiamo nel DB listino catalog_materials
+            let query_placeholders = search_codes.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT id, code, description, unit, unit_price, supplier, markup FROM catalog_materials WHERE code IN ({}) LIMIT 1",
+                query_placeholders
+            );
+            
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let params = rusqlite::params_from_iter(search_codes.iter());
+            let mut rows = stmt.query(params).map_err(|e| e.to_string())?;
+            
+            if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+                let found_item = CatalogMaterial::from_row(row).map_err(|e| e.to_string())?;
+                suggested_item = Some(found_item);
+                match_score = 100;
+                action = "update".to_string();
+            }
+        }
+        
+        // Se non abbiamo trovato corrispondenza esatta per codice, proviamo per descrizione esatta
+        if suggested_item.is_none() {
+            let mut stmt = conn.prepare(
+                "SELECT id, code, description, unit, unit_price, supplier, markup FROM catalog_materials WHERE LOWER(description) = LOWER(?) LIMIT 1"
+            ).map_err(|e| e.to_string())?;
+            
+            let mut rows = stmt.query([&description]).map_err(|e| e.to_string())?;
+            if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+                let found_item = CatalogMaterial::from_row(row).map_err(|e| e.to_string())?;
+                suggested_item = Some(found_item);
+                match_score = 90;
+                action = "update".to_string();
+            }
+        }
+        
+        // Se non troviamo nulla, proponiamo la creazione
+        let custom_code = if suggested_item.is_none() {
+            code_produttore.clone().or_else(|| code_alternativo.clone()).unwrap_or_default()
+        } else {
+            "".to_string()
+        };
+        
+        let selected_catalog_item_id = suggested_item.as_ref().and_then(|item| item.id);
+        
+        mappings.push(XmlMappingRow {
+            id: idx,
+            invoice_item,
+            suggested_item,
+            match_score,
+            action,
+            selected_catalog_item_id,
+            custom_code,
+        });
+    }
+    
+    Ok(mappings)
+}
+
+#[tauri::command]
+pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -> Result<(), String> {
+    log::info!("CMD [import_invoice_mappings] count: {}, supplier: {}", mappings.len(), supplier);
+    let mut conn = get_connection().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    
+    for row in mappings {
+        match row.action.as_str() {
+            "update" => {
+                if let Some(catalog_id) = row.selected_catalog_item_id {
+                    let price = row.invoice_item.unit_price;
+                    tx.execute(
+                        "UPDATE catalog_materials SET unit_price = ? WHERE id = ?",
+                        rusqlite::params![price, catalog_id],
+                    ).map_err(|e| e.to_string())?;
+                }
+            }
+            "create" => {
+                let code = if !row.custom_code.trim().is_empty() {
+                    row.custom_code.trim().to_string()
+                } else {
+                    row.invoice_item.code_produttore.clone()
+                        .or_else(|| row.invoice_item.code_alternativo.clone())
+                        .unwrap_or_else(|| format!("NEW-{}", row.id))
+                };
+                
+                let desc = row.invoice_item.description;
+                let unit = row.invoice_item.unit;
+                let price = row.invoice_item.unit_price;
+                
+                tx.execute(
+                    "INSERT INTO catalog_materials (code, description, unit, unit_price, supplier, markup) VALUES (?, ?, ?, ?, ?, ?)",
+                    rusqlite::params![code, desc, unit, price, supplier, 0.0],
+                ).map_err(|e| e.to_string())?;
+            }
+            _ => {} // ignore
+        }
+    }
+    
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
