@@ -221,9 +221,9 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
       </div>
 
       {isCostCenter && (
-        <Card className="p-8 hover:bg-white transition-all duration-500">
+        <Card className="p-8 hover:bg-white group transition-all duration-500">
           <div className="flex items-center gap-3 mb-6">
-            <div className={`w-1.5 h-6 bg-accent rounded-full`}></div>
+            <div className="w-1.5 h-6 bg-accent rounded-full group-hover:scale-y-125 transition-transform"></div>
             <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Distribuzione Costi per Fase</span>
           </div>
           
