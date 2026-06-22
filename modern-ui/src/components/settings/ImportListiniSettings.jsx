@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileSpreadsheet, 
   FileText,
@@ -81,6 +82,7 @@ const ImportListiniSettings = () => {
   const [isRowDeleteConfirmOpen, setIsRowDeleteConfirmOpen] = useState(false)
   const [rowToDeleteId, setRowToDeleteId] = useState(null)
   const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false)
+  const [isImportOverlayOpen, setIsImportOverlayOpen] = useState(false)
 
   const loadSummary = async () => {
     try {
@@ -189,6 +191,7 @@ const ImportListiniSettings = () => {
               supplier: 'MARCHIOL S.P.A.'
             }))
             setPdfPreviewItems(preview)
+            setIsImportOverlayOpen(true)
             
             const formattedMappings = rows.map(r => ({
               id: r.id,
@@ -217,6 +220,7 @@ const ImportListiniSettings = () => {
               { description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
               { description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
             ])
+            setIsImportOverlayOpen(true)
           }
         } catch (err) {
           console.error("Errore caricamento anteprima:", err)
@@ -230,6 +234,20 @@ const ImportListiniSettings = () => {
       setPdfPreviewItems([])
     }
   }, [selectedPdfPath])
+
+  useEffect(() => {
+    if (isImportOverlayOpen) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [isImportOverlayOpen])
 
   useEffect(() => {
     if (pdfPreviewItems.length > 0 && !isXmlFile) {
@@ -510,6 +528,7 @@ const ImportListiniSettings = () => {
         })
       }
       setSelectedPdfPath('')
+      setIsImportOverlayOpen(false)
       loadSummary()
     } catch (err) {
       console.error("Errore importazione:", err)
@@ -654,8 +673,7 @@ const ImportListiniSettings = () => {
       )}
 
       {activeSettingsTab === 'import' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+        <div className="max-w-4xl mx-auto space-y-8 animate-premium-in">
           {/* CARICAMENTO FILE */}
           <div className="bg-white/40 backdrop-blur-md border border-white/60 p-10 rounded-[3rem] shadow-xl space-y-6 flex flex-col justify-between">
             <div>
@@ -877,275 +895,31 @@ const ImportListiniSettings = () => {
                 </div>
 
                 {selectedPdfPath && (
-                  <div className="bg-slate-50/80 rounded-[2.5rem] p-6 border border-slate-100 space-y-6 animate-premium-in">
-                    {/* Anteprima dei dati */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
-                        <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                          <Eye size={14} className="text-indigo-600 animate-pulse" /> Anteprima Articoli PDF Rilevati
-                        </span>
-                        {loadingPdfPreview ? (
-                          <span className="text-[0.65rem] font-bold text-slate-400 animate-pulse">Analisi del file in corso...</span>
-                        ) : pdfPreviewItems.length > 0 ? (
-                          <span className="text-[0.65rem] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 flex items-center gap-1 shadow-sm">
-                            <CheckCircle2 size={10} /> Articoli Estratti
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {loadingPdfPreview ? (
-                        <div className="flex flex-col items-center justify-center py-8 space-y-3 bg-white/40 backdrop-blur-sm border border-slate-100 rounded-2xl">
-                          <Loader2 size={24} className="animate-spin text-indigo-600" />
-                          <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Estrazione testi e tabelle...</span>
-                        </div>
-                      ) : pdfPreviewItems.length > 0 ? (
-                        <div className="overflow-x-auto rounded-3xl border border-slate-200/50 bg-white/95 shadow-md p-2">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-slate-100/50 border-b border-slate-200/50">
-                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-1/3">Articolo Estratto ({isXmlFile ? 'XML' : 'PDF'})</th>
-                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center w-1/4">Azione</th>
-                                <th className="py-3 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider w-5/12">Associazione Catalogo</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {pdfMappings.map((m) => {
-                                const isSearching = rowSearchResults[m.id] && rowSearchResults[m.id].length > 0;
-                                return (
-                                  <tr 
-                                    key={m.id} 
-                                    className={`hover:bg-slate-50/30 transition-colors ${isSearching ? 'relative z-[30]' : 'relative z-0'}`}
-                                  >
-                                  {/* Articolo PDF */}
-                                  <td className="py-4 px-4 space-y-1">
-                                    <div className="text-xs font-black text-slate-800 leading-tight">
-                                      {m.pdfItem.description}
-                                    </div>
-                                    <div className="flex gap-2 text-[0.65rem] font-bold text-slate-400">
-                                      <span>UM: {m.pdfItem.unit || 'pz'}</span>
-                                      <span>•</span>
-                                      <span className="text-indigo-600">Prezzo {isXmlFile ? 'XML' : 'PDF'}: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                  </td>
-
-                                  {/* Azione Selector */}
-                                  <td className="py-4 px-4 text-center">
-                                    <div className="flex flex-col sm:flex-row gap-1.5 justify-center items-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateMappingAction(m.id, 'update')}
-                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
-                                          m.action === 'update'
-                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
-                                        }`}
-                                      >
-                                        Associa
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateMappingAction(m.id, 'create')}
-                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
-                                          m.action === 'create'
-                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
-                                        }`}
-                                      >
-                                        Crea
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateMappingAction(m.id, 'ignore')}
-                                        className={`px-2.5 py-1.5 rounded-xl text-[0.55rem] font-black uppercase tracking-wider transition-all border ${
-                                          m.action === 'ignore'
-                                            ? 'bg-slate-600 border-slate-600 text-white shadow-md shadow-slate-600/20'
-                                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
-                                        }`}
-                                      >
-                                        Ignora
-                                      </button>
-                                    </div>
-                                  </td>
-
-                                  {/* Associazione Catalogo */}
-                                  <td className="py-4 px-4">
-                                    {m.action === 'update' && m.suggestedItem && (
-                                      <div className="space-y-2 animate-premium-in">
-                                        <div className="space-y-1">
-                                          <div className="flex items-center gap-2">
-                                            <span className={`px-2 py-0.5 rounded-full text-[0.55rem] font-black border uppercase tracking-wider ${
-                                              m.matchScore >= 90
-                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                                : 'bg-amber-50 text-amber-600 border-amber-100'
-                                            }`}>
-                                              Match {m.matchScore}%
-                                            </span>
-                                            <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
-                                              {m.suggestedItem.code}
-                                            </span>
-                                          </div>
-                                          <div className="text-[0.7rem] font-semibold text-slate-500 truncate max-w-[220px]" title={m.suggestedItem.description}>
-                                            {m.suggestedItem.description}
-                                          </div>
-                                          <div className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">
-                                            Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
-                                            <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
-                                          </div>
-                                        </div>
-
-                                        {/* Input di ricerca per cambiare associazione */}
-                                        <div className="relative">
-                                          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
-                                            <Search size={12} className="text-slate-400" />
-                                            <input
-                                              type="text"
-                                              value={rowSearchQueries[m.id] || ''}
-                                              onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
-                                              placeholder="Cerca altro codice o desc..."
-                                              className="w-full bg-transparent text-[0.65rem] font-bold text-slate-700 focus:outline-none placeholder-slate-400"
-                                            />
-                                            {(rowSearchQueries[m.id] || '') && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
-                                                  setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
-                                                }}
-                                                className="text-slate-400 hover:text-slate-600"
-                                              >
-                                                <X size={12} />
-                                              </button>
-                                            )}
-                                          </div>
-                                          {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
-                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
-                                              {rowSearchResults[m.id].map((res) => (
-                                                <button
-                                                  key={res.id}
-                                                  type="button"
-                                                  onClick={() => handleSelectAlternativeItem(m.id, res)}
-                                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
-                                                >
-                                                  <div className="flex justify-between items-center">
-                                                    <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1 py-0.2 rounded">
-                                                      {res.code}
-                                                    </span>
-                                                    <span className="text-[0.6rem] text-indigo-600 font-bold">
-                                                      € {res.unit_price.toFixed(2)}
-                                                    </span>
-                                                  </div>
-                                                  <div className="text-[0.65rem] font-semibold text-slate-500 truncate">
-                                                    {res.description}
-                                                  </div>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {m.action === 'update' && !m.suggestedItem && (
-                                      <div className="space-y-2 animate-premium-in">
-                                        <div className="text-xs font-bold text-rose-500 flex items-center gap-1.5">
-                                          <AlertCircle size={14} /> Nessuna corrispondenza automatica.
-                                        </div>
-                                        <div className="relative">
-                                          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
-                                            <Search size={12} className="text-slate-400" />
-                                            <input
-                                              type="text"
-                                              value={rowSearchQueries[m.id] || ''}
-                                              onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
-                                              placeholder="Cerca nel catalogo per codice o desc..."
-                                              className="w-full bg-transparent text-[0.65rem] font-bold text-slate-700 focus:outline-none placeholder-slate-400"
-                                            />
-                                            {(rowSearchQueries[m.id] || '') && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
-                                                  setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
-                                                }}
-                                                className="text-slate-400 hover:text-slate-600"
-                                              >
-                                                <X size={12} />
-                                              </button>
-                                            )}
-                                          </div>
-                                          {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
-                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
-                                              {rowSearchResults[m.id].map((res) => (
-                                                <button
-                                                  key={res.id}
-                                                  type="button"
-                                                  onClick={() => handleSelectAlternativeItem(m.id, res)}
-                                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
-                                                >
-                                                  <div className="flex justify-between items-center">
-                                                    <span className="text-[0.65rem] font-mono font-black text-slate-700 bg-slate-100 px-1 py-0.2 rounded">
-                                                      {res.code}
-                                                    </span>
-                                                    <span className="text-[0.6rem] text-indigo-600 font-bold">
-                                                      € {res.unit_price.toFixed(2)}
-                                                    </span>
-                                                  </div>
-                                                  <div className="text-[0.65rem] font-semibold text-slate-500 truncate">
-                                                    {res.description}
-                                                  </div>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {m.action === 'create' && (
-                                      <div className="space-y-1.5 animate-premium-in">
-                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-full text-[0.55rem] font-black uppercase tracking-wider">
-                                          Nuovo Articolo
-                                        </span>
-                                        <div className="space-y-1">
-                                          <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Codice Articolo:</label>
-                                          <input
-                                            type="text"
-                                            value={m.customCode}
-                                            onChange={(e) => handleCustomCodeChange(m.id, e.target.value)}
-                                            placeholder="Inserisci codice..."
-                                            className="w-full bg-white border border-slate-200 rounded-xl py-1 px-2.5 text-[0.65rem] font-bold text-slate-700 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {m.action === 'ignore' && (
-                                      <div className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest italic">
-                                        L'articolo non verrà importato
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              ); })}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
+                  <div className="bg-slate-50/80 rounded-[2.5rem] p-6 border border-slate-100 space-y-4 animate-premium-in text-center">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                      <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mx-auto">
+                        <Eye size={14} className="text-indigo-600 animate-pulse" /> Riconciliazione Listino Pronta
+                      </span>
                     </div>
-
-                    <button
-                      onClick={handleImportPdf}
-                      disabled={pdfImporting || loadingPdfPreview}
-                      className="w-full flex items-center justify-center gap-2 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/10 disabled:opacity-50"
-                    >
-                      {pdfImporting ? (
-                        <>
-                          <Loader2 size={18} className="animate-spin" /> Elaborazione ed Importazione {isXmlFile ? 'XML' : 'PDF'}...
-                        </>
-                      ) : (
-                        isXmlFile ? 'Avvia Aggiornamento Listino da XML' : 'Avvia Aggiornamento Listino da PDF'
-                      )}
-                    </button>
+                    {loadingPdfPreview ? (
+                      <div className="flex flex-col items-center justify-center py-4 space-y-3">
+                        <Loader2 size={24} className="animate-spin text-indigo-600" />
+                        <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Estrazione dati in corso...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold text-slate-500">
+                          Il file è stato caricato con successo. Clicca sul pulsante sottostante per riconciliare gli articoli e completare l'importazione.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsImportOverlayOpen(true)}
+                          className="w-full flex items-center justify-center gap-2 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md"
+                        >
+                          <Eye size={14} /> Apri Riconciliazione ({pdfMappings.length} articoli)
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1158,67 +932,28 @@ const ImportListiniSettings = () => {
               </span>
             </div>
           </div>
-        </div>
-
-        {/* STATO CATALOGO */}
-        <div className="bg-white/40 backdrop-blur-md border border-white/60 p-10 rounded-[3rem] shadow-xl space-y-6 flex flex-col justify-between">
-          <div className="space-y-6">
-            <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-              <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
-                <FileSpreadsheet size={24} />
-              </div>
-              <div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Catalogo Attuale</h3>
-                <p className="text-xs font-bold text-slate-400">Riepilogo degli articoli e fornitori importati</p>
-              </div>
-            </div>
-
-            {loadingSummary ? (
-              <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                <Loader2 size={32} className="animate-spin text-teal-600" />
-                <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Caricamento riepilogo...</span>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-[2rem] p-8 shadow-xl shadow-teal-500/10 space-y-1">
-                  <span className="text-[0.65rem] font-black uppercase tracking-widest text-teal-100">Articoli Totali in Database</span>
-                  <div className="text-4xl font-black">{summary.total_count.toLocaleString('it-IT')}</div>
-                </div>
-
-                <div className="space-y-3">
-                  <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitori Rilevati ({summary.suppliers.length})</span>
-                  <div className="max-h-60 overflow-y-auto pr-1 space-y-2 no-scrollbar">
-                    {summary.suppliers.length === 0 ? (
-                      <div className="text-center py-8 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50 rounded-2xl border border-slate-100">
-                        Nessun articolo importato
-                      </div>
-                    ) : (
-                      summary.suppliers.map((s, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-white/60 p-4 rounded-xl border border-slate-100/50 shadow-sm">
-                          <span className="text-xs font-black text-slate-700 uppercase tracking-tight">{s.name}</span>
-                          <span className="text-xs font-bold text-slate-400">{s.count} art.</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
           {summary.total_count > 0 && (
-            <button
-              onClick={handleClearCatalog}
-              disabled={clearing}
-              className="w-full flex items-center justify-center gap-2 h-12 bg-red-50 hover:bg-red-100 text-red-500 rounded-2xl text-[0.65rem] font-black uppercase tracking-widest transition-all mt-6"
-            >
-              {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Svuota Catalogo Listini
-            </button>
+            <div className="flex justify-end pt-4">
+              <button
+                onClick={handleClearCatalog}
+                disabled={clearing}
+                className="flex items-center gap-2 px-5 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-2xl text-[0.65rem] font-black uppercase tracking-widest transition-all shadow-sm"
+              >
+                {clearing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Svuota Catalogo Listini
+              </button>
+            </div>
           )}
-      </div>
-    </div>
-  ) : (
-    <div className="bg-white/40 backdrop-blur-md border border-white/60 p-8 rounded-[3rem] shadow-xl space-y-6 animate-premium-in">
+        </div>
+      ) : (
+        <div className="bg-white/40 backdrop-blur-md border border-white/60 p-8 rounded-[3rem] shadow-xl space-y-6 animate-premium-in">
+          {/* Nota informativa catalogo attuale */}
+          <div className="flex items-center gap-3 bg-teal-500/5 border border-teal-500/10 rounded-2xl p-4 text-[0.7rem] font-bold text-teal-700 uppercase tracking-wider">
+            <Info size={16} className="text-teal-600" />
+            <span>
+              Attualmente sono presenti <strong className="text-teal-800">{summary.total_count.toLocaleString('it-IT')} articoli</strong> nel catalogo, suddivisi su <strong className="text-teal-800">{summary.suppliers.length} fornitori</strong>.
+            </span>
+          </div>
       {/* Barra dei filtri */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="flex-1 w-full relative group">
@@ -1529,6 +1264,310 @@ const ImportListiniSettings = () => {
     cancelText="Annulla"
     type="danger"
   />
+
+  {/* Overlay Riconciliazione in sovrapressione con sfondo sfocato, renderizzato a livello di body */}
+  {createPortal(
+    <AnimatePresence>
+      {isImportOverlayOpen && pdfPreviewItems.length > 0 && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4 sm:p-6 md:p-10">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white/95 rounded-[2.5rem] shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden border border-white/60 p-6 sm:p-8 space-y-6"
+          >
+            {/* Header dell'overlay */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
+                  <Eye size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Riconciliazione Listino ({isXmlFile ? 'XML' : 'PDF'})</h3>
+                  <p className="text-xs font-bold text-slate-400">Verifica le associazioni suggerite e inserisci i codici mancanti prima di completare l'importazione</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsImportOverlayOpen(false)
+                }}
+                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Tabella con scritte e layout ingranditi */}
+            <div className="flex-1 overflow-auto rounded-[2rem] border border-slate-200/50 bg-white p-2">
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="bg-slate-100/70 border-b border-slate-200">
+                    <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-wider w-1/3">Articolo Estratto dal File</th>
+                    <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-wider text-center w-1/4">Azione Riconciliazione</th>
+                    <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-wider w-5/12">Associazione nel Catalogo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {pdfMappings.map((m) => {
+                    const isSearching = rowSearchResults[m.id] && rowSearchResults[m.id].length > 0;
+                    return (
+                      <tr 
+                        key={m.id} 
+                        className={`hover:bg-slate-50/50 transition-colors ${isSearching ? 'relative z-[30]' : 'relative z-0'}`}
+                      >
+                        {/* Articolo PDF */}
+                        <td className="py-5 px-6 space-y-2">
+                          <div className="text-sm font-black text-slate-800 leading-snug">
+                            {m.pdfItem.description}
+                          </div>
+                          <div className="flex gap-3 text-xs font-bold text-slate-400">
+                            <span>UM: {m.pdfItem.unit || 'pz'}</span>
+                            <span>•</span>
+                            <span className="text-indigo-600 font-extrabold">Prezzo {isXmlFile ? 'XML' : 'PDF'}: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </td>
+
+                        {/* Azione Selector */}
+                        <td className="py-5 px-6 text-center">
+                          <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMappingAction(m.id, 'update')}
+                              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                                m.action === 'update'
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              Associa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMappingAction(m.id, 'create')}
+                              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                                m.action === 'create'
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              Crea
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateMappingAction(m.id, 'ignore')}
+                              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                                m.action === 'ignore'
+                                  ? 'bg-slate-600 border-slate-600 text-white shadow-md shadow-slate-600/20'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              Ignora
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Associazione Catalogo */}
+                        <td className="py-5 px-6">
+                          {m.action === 'update' && m.suggestedItem && (
+                            <div className="space-y-3 animate-premium-in">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-black border uppercase tracking-wider ${
+                                    m.matchScore >= 90
+                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                      : 'bg-amber-50 text-amber-600 border-amber-100'
+                                  }`}>
+                                    Match {m.matchScore}%
+                                  </span>
+                                  <span className="text-xs font-mono font-black text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                                    {m.suggestedItem.code}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-semibold text-slate-600 truncate max-w-[320px]" title={m.suggestedItem.description}>
+                                  {m.suggestedItem.description}
+                                </div>
+                                <div className="text-xs font-black uppercase tracking-wider text-slate-400">
+                                  Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
+                                  <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
+                                </div>
+                              </div>
+
+                              {/* Input di ricerca per cambiare associazione */}
+                              <div className="relative">
+                                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+                                  <Search size={14} className="text-slate-400" />
+                                  <input
+                                    type="text"
+                                    value={rowSearchQueries[m.id] || ''}
+                                    onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
+                                    placeholder="Cerca altro codice o desc..."
+                                    className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none placeholder-slate-400"
+                                  />
+                                  {(rowSearchQueries[m.id] || '') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
+                                        setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
+                                      }}
+                                      className="text-slate-400 hover:text-slate-600"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                                {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
+                                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                    {rowSearchResults[m.id].map((res) => (
+                                      <button
+                                        key={res.id}
+                                        type="button"
+                                        onClick={() => handleSelectAlternativeItem(m.id, res)}
+                                        className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-1"
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-xs font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            {res.code}
+                                          </span>
+                                          <span className="text-xs text-indigo-600 font-extrabold">
+                                            € {res.unit_price.toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="text-xs font-semibold text-slate-500 truncate">
+                                          {res.description}
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {m.action === 'update' && !m.suggestedItem && (
+                            <div className="space-y-3 animate-premium-in">
+                              <div className="text-xs font-bold text-rose-500 flex items-center gap-2">
+                                <AlertCircle size={16} /> Nessuna corrispondenza automatica.
+                              </div>
+                              <div className="relative">
+                                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+                                  <Search size={14} className="text-slate-400" />
+                                  <input
+                                    type="text"
+                                    value={rowSearchQueries[m.id] || ''}
+                                    onChange={(e) => handleSearchAlternativeCatalogItem(m.id, e.target.value)}
+                                    placeholder="Cerca nel catalogo per codice o desc..."
+                                    className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none placeholder-slate-400"
+                                  />
+                                  {(rowSearchQueries[m.id] || '') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowSearchQueries(prev => ({ ...prev, [m.id]: '' }))
+                                        setRowSearchResults(prev => ({ ...prev, [m.id]: [] }))
+                                      }}
+                                      className="text-slate-400 hover:text-slate-600"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                                {rowSearchResults[m.id] && rowSearchResults[m.id].length > 0 && (
+                                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                    {rowSearchResults[m.id].map((res) => (
+                                      <button
+                                        key={res.id}
+                                        type="button"
+                                        onClick={() => handleSelectAlternativeItem(m.id, res)}
+                                        className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex flex-col gap-1"
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-xs font-mono font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            {res.code}
+                                          </span>
+                                          <span className="text-xs text-indigo-600 font-extrabold">
+                                            € {res.unit_price.toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="text-xs font-semibold text-slate-500 truncate">
+                                          {res.description}
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {m.action === 'create' && (
+                            <div className="space-y-2 animate-premium-in">
+                              <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded-full text-xs font-black uppercase tracking-wider">
+                                Nuovo Articolo
+                              </span>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Codice Articolo:</label>
+                                <input
+                                  type="text"
+                                  value={m.customCode}
+                                  onChange={(e) => handleCustomCodeChange(m.id, e.target.value)}
+                                  placeholder="Inserisci codice..."
+                                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {m.action === 'ignore' && (
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest italic">
+                              L'articolo non verrà importato
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer dell'overlay con tasti di azione */}
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-t border-slate-100 pt-4">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                Articoli da elaborare: {pdfMappings.filter(m => m.action !== 'ignore').length} / {pdfMappings.length}
+              </span>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImportOverlayOpen(false)
+                  }}
+                  className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleImportPdf}
+                  disabled={pdfImporting}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/10 disabled:opacity-50"
+                >
+                  {pdfImporting ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" /> Importazione...
+                    </>
+                  ) : (
+                    isXmlFile ? 'Applica Modifiche da XML' : 'Applica Modifiche da PDF'
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body
+  )}
 
   <ConfirmModal
     isOpen={isImportConfirmOpen}
