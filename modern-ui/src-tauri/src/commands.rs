@@ -2270,6 +2270,7 @@ pub struct XmlMappingRow {
     pub action: String, // "update", "create", "ignore"
     pub selected_catalog_item_id: Option<i64>,
     pub custom_code: String,
+    pub markup: Option<f64>,
 }
 
 #[tauri::command]
@@ -2386,6 +2387,7 @@ pub fn parse_invoice_xml(file_path: String) -> Result<Vec<XmlMappingRow>, String
         };
         
         let selected_catalog_item_id = suggested_item.as_ref().and_then(|item| item.id);
+        let markup = suggested_item.as_ref().and_then(|item| item.markup).or(Some(0.0));
         
         mappings.push(XmlMappingRow {
             id: idx,
@@ -2395,6 +2397,7 @@ pub fn parse_invoice_xml(file_path: String) -> Result<Vec<XmlMappingRow>, String
             action,
             selected_catalog_item_id,
             custom_code,
+            markup,
         });
     }
     
@@ -2408,13 +2411,14 @@ pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     
     for row in mappings {
+        let markup_val = row.markup.unwrap_or(0.0);
         match row.action.as_str() {
             "update" => {
                 if let Some(catalog_id) = row.selected_catalog_item_id {
                     let price = row.invoice_item.unit_price;
                     tx.execute(
-                        "UPDATE catalog_materials SET unit_price = ? WHERE id = ?",
-                        rusqlite::params![price, catalog_id],
+                        "UPDATE catalog_materials SET unit_price = ?, markup = ? WHERE id = ?",
+                        rusqlite::params![price, markup_val, catalog_id],
                     ).map_err(|e| e.to_string())?;
                 }
             }
@@ -2433,7 +2437,7 @@ pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -
                 
                 tx.execute(
                     "INSERT INTO catalog_materials (code, description, unit, unit_price, supplier, markup) VALUES (?, ?, ?, ?, ?, ?)",
-                    rusqlite::params![code, desc, unit, price, supplier, 0.0],
+                    rusqlite::params![code, desc, unit, price, supplier, markup_val],
                 ).map_err(|e| e.to_string())?;
             }
             _ => {} // ignore

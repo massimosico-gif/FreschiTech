@@ -206,7 +206,8 @@ const ImportListiniSettings = () => {
               action: r.action,
               selectedCatalogItemId: r.selected_catalog_item_id,
               customCode: r.custom_code,
-              invoiceItem: r.invoice_item
+              invoiceItem: r.invoice_item,
+              markup: r.markup !== null && r.markup !== undefined ? r.markup : 0.0
             }))
             setPdfMappings(formattedMappings)
           } else {
@@ -257,19 +258,19 @@ const ImportListiniSettings = () => {
         let action = 'ignore'
 
         if (idx === 0) {
-          suggestedItem = { id: 101, code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.72 }
+          suggestedItem = { id: 101, code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.72, markup: 0.25 }
           matchScore = 95
           action = 'update'
         } else if (idx === 1) {
-          suggestedItem = { id: 102, code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', unit: 'pz', unit_price: 3.90 }
+          suggestedItem = { id: 102, code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', unit: 'pz', unit_price: 3.90, markup: 0.20 }
           matchScore = 88
           action = 'update'
         } else if (idx === 2) {
-          suggestedItem = { id: 103, code: 'INT-BIPT16', description: 'Interruttore bipolare 16A', unit: 'pz', unit_price: 7.20 }
+          suggestedItem = { id: 103, code: 'INT-BIPT16', description: 'Interruttore bipolare 16A', unit: 'pz', unit_price: 7.20, markup: 0.25 }
           matchScore = 84
           action = 'update'
         } else if (idx === 3) {
-          suggestedItem = { id: 104, code: 'TUB-RK15-20', description: 'Tubo corrugato RK15 d20', unit: 'm', unit_price: 0.38 }
+          suggestedItem = { id: 104, code: 'TUB-RK15-20', description: 'Tubo corrugato RK15 d20', unit: 'm', unit_price: 0.38, markup: 0.15 }
           matchScore = 79
           action = 'update'
         } else if (idx === 4) {
@@ -286,7 +287,8 @@ const ImportListiniSettings = () => {
           matchScore,
           action, // 'update', 'create', 'ignore'
           selectedCatalogItemId: suggestedItem ? suggestedItem.id : null,
-          customCode: idx === 4 ? 'PLAF-LED-30W-NEW' : ''
+          customCode: idx === 4 ? 'PLAF-LED-30W-NEW' : '',
+          markup: suggestedItem ? (suggestedItem.markup || 0.0) : 0.0
         }
       })
       setPdfMappings(defaultMappings)
@@ -505,7 +507,8 @@ const ImportListiniSettings = () => {
           match_score: m.matchScore,
           action: m.action,
           selected_catalog_item_id: m.selectedCatalogItemId,
-          custom_code: m.customCode
+          custom_code: m.customCode,
+          markup: m.markup
         }))
         
         await invoke('import_invoice_mappings', {
@@ -544,13 +547,14 @@ const ImportListiniSettings = () => {
         let suggestedItem = m.suggestedItem
         // Default mock suggestion if switching back to 'update'
         if (action === 'update' && !suggestedItem) {
-          suggestedItem = { id: 105, code: 'NEW-MOCK-CODE', description: m.pdfItem.description, unit: m.pdfItem.unit, unit_price: 10.00 }
+          suggestedItem = { id: 105, code: 'NEW-MOCK-CODE', description: m.pdfItem.description, unit: m.pdfItem.unit, unit_price: 10.00, markup: 0.25 }
         }
         return {
           ...m,
           action,
           suggestedItem,
-          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null
+          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null,
+          markup: action === 'update' && suggestedItem ? (suggestedItem.markup || 0.0) : 0.0
         }
       }
       return m
@@ -559,6 +563,10 @@ const ImportListiniSettings = () => {
 
   const handleCustomCodeChange = (rowId, val) => {
     setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, customCode: val } : m))
+  }
+
+  const handleMarkupChange = (rowId, val) => {
+    setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, markup: val } : m))
   }
 
   const handleSearchAlternativeCatalogItem = async (rowId, query) => {
@@ -582,7 +590,8 @@ const ImportListiniSettings = () => {
           ...m,
           suggestedItem: item,
           selectedCatalogItemId: item.id,
-          matchScore: 100
+          matchScore: 100,
+          markup: item.markup || 0.0
         }
       }
       return m
@@ -1391,6 +1400,19 @@ const ImportListiniSettings = () => {
                                   Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
                                   <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
                                 </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Rincaro (%):</label>
+                                  <div className="relative flex items-center max-w-[150px]">
+                                    <input
+                                      type="number"
+                                      value={m.markup !== undefined ? Math.round(m.markup * 100) : 0}
+                                      onChange={(e) => handleMarkupChange(m.id, (parseFloat(e.target.value) || 0) / 100)}
+                                      placeholder="0"
+                                      className="w-full bg-white border border-slate-200 rounded-xl py-1 px-3 text-xs font-black text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    <span className="absolute right-3 text-xs font-black text-slate-400">%</span>
+                                  </div>
+                                </div>
                               </div>
 
                               {/* Input di ricerca per cambiare associazione */}
@@ -1502,7 +1524,7 @@ const ImportListiniSettings = () => {
                           )}
 
                           {m.action === 'create' && (
-                            <div className="space-y-2 animate-premium-in">
+                            <div className="space-y-3 animate-premium-in">
                               <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded-full text-xs font-black uppercase tracking-wider">
                                 Nuovo Articolo
                               </span>
@@ -1515,6 +1537,30 @@ const ImportListiniSettings = () => {
                                   placeholder="Inserisci codice..."
                                   className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Rincaro (%):</label>
+                                <div className="relative flex items-center">
+                                  <input
+                                    type="number"
+                                    value={m.markup !== undefined ? Math.round(m.markup * 100) : 0}
+                                    onChange={(e) => handleMarkupChange(m.id, (parseFloat(e.target.value) || 0) / 100)}
+                                    placeholder="0"
+                                    className={`w-full bg-white border rounded-xl py-2 px-3 text-xs font-black focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                                      m.markup === 0 || m.markup === undefined || m.markup === null
+                                        ? 'border-red-300 text-red-600 focus:ring-red-500 bg-red-50/30'
+                                        : 'border-slate-200 text-slate-700'
+                                    }`}
+                                  />
+                                  <span className={`absolute right-3 text-xs font-black ${
+                                    m.markup === 0 || m.markup === undefined || m.markup === null ? 'text-red-500' : 'text-slate-400'
+                                  }`}>%</span>
+                                </div>
+                                {(m.markup === 0 || m.markup === undefined || m.markup === null) && (
+                                  <p className="text-[10px] font-bold text-red-500">
+                                    Rincaro non inserito (0%)
+                                  </p>
+                                )}
                               </div>
                             </div>
                           )}
