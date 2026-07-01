@@ -1,11 +1,12 @@
 {
   "name": "freschitech",
   "private": true,
-  "version": "1.1.27",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:web": "vite build --mode web",
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri"
