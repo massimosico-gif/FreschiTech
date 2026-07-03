@@ -241,6 +241,92 @@ export async function invoke(commandName, args = {}) {
       saveDB(db);
       return true;
 
+    case 'get_catalog_materials': {
+      const search = (args.search || '').trim().toLowerCase();
+      const supplier = (args.supplier || '').trim().toLowerCase();
+      const sortBy = args.sortBy || 'id';
+      const sortDesc = !!args.sortDesc;
+      const limit = args.limit || 50;
+      const offset = args.offset || 0;
+
+      let filtered = [...db.catalog_materials];
+
+      // Filtro ricerca
+      if (search) {
+        filtered = filtered.filter(m => 
+          (m.code && m.code.toLowerCase().includes(search)) || 
+          (m.description && m.description.toLowerCase().includes(search))
+        );
+      }
+
+      // Filtro fornitore
+      if (supplier && supplier !== 'all') {
+        if (supplier === 'none') {
+          filtered = filtered.filter(m => !m.supplier);
+        } else {
+          filtered = filtered.filter(m => m.supplier && m.supplier.toLowerCase() === supplier);
+        }
+      }
+
+      // Ordinamento
+      filtered.sort((a, b) => {
+        let valA = a[sortBy];
+        let valB = b[sortBy];
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'string') {
+          return sortDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
+        } else {
+          return sortDesc ? valB - valA : valA - valB;
+        }
+      });
+
+      const totalCount = filtered.length;
+      const items = filtered.slice(offset, offset + limit);
+
+      return {
+        items,
+        total_count: totalCount
+      };
+    }
+
+    case 'save_catalog_material': {
+      const item = args.item;
+      if (!item.id) {
+        item.id = db.catalog_materials.length > 0 ? Math.max(...db.catalog_materials.map(x => x.id || 0)) + 1 : 101;
+        db.catalog_materials.push(item);
+      } else {
+        db.catalog_materials = db.catalog_materials.map(x => x.id === item.id ? { ...x, ...item } : x);
+      }
+      saveDB(db);
+      return true;
+    }
+
+    case 'delete_catalog_material':
+      db.catalog_materials = db.catalog_materials.filter(x => x.id !== args.id);
+      saveDB(db);
+      return true;
+
+    case 'import_catalog_materials': {
+      const clearExisting = args.clearExisting !== undefined ? args.clearExisting : args.clear_existing;
+      if (clearExisting) {
+        db.catalog_materials = [];
+      }
+      
+      const newItems = [
+        { id: 201, code: 'CAV-FG16-3G1.5', description: 'Cavo FG16OR16 3G1.5 mm²', unit: 'm', unit_price: 1.15, supplier: args.supplier || 'MARCHIOL S.P.A.', markup: args.markup || 0.25 },
+        { id: 202, code: 'CAV-FG16-5G1.5', description: 'Cavo FG16OR16 5G1.5 mm²', unit: 'm', unit_price: 1.85, supplier: args.supplier || 'MARCHIOL S.P.A.', markup: args.markup || 0.25 },
+        { id: 203, code: 'INTERR-16A', description: 'Bticino Interruttore automatico 1P+N 16A', unit: 'pz', unit_price: 12.50, supplier: args.supplier || 'MARCHIOL S.P.A.', markup: args.markup || 0.20 },
+        { id: 204, code: 'DIFF-25A-30MA', description: 'Bticino Salvavita Differenziale 2P 25A 30mA', unit: 'pz', unit_price: 34.90, supplier: args.supplier || 'MARCHIOL S.P.A.', markup: args.markup || 0.20 }
+      ];
+
+      db.catalog_materials.push(...newItems);
+      saveDB(db);
+      return newItems.length;
+    }
+
     case 'search_catalog_materials': {
       const query = (args.query || '').toLowerCase();
       // Ricerca per codice, poi descrizione
