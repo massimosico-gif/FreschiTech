@@ -7,26 +7,41 @@ const MOCK_STORAGE_KEY = 'freschitech_mock_db';
 const INITIAL_DB = {
   clients: [
     { id: 1, type: 'condominium', name: 'Condominio Stella Marina', street: 'Via Bafile 120', city: 'Jesolo', zip_code: '30016', province: 'VE', vat_id: '12345678901', tax_code: '12345678901', email: 'info@stellamarina.it', pec: 'stellamarina@pec.it', phone: '0421 380000', notes: 'Custode presente la mattina', distance: 15 },
-    { id: 2, type: 'private', name: 'Rossi Mario', street: 'Cannaregio 4560', city: 'Venezia', zip_code: '30121', province: 'VE', vat_id: '', tax_code: 'RSSMRA80A01L736U', email: 'mario.rossi@gmail.com', pec: '', phone: '335 1234567', notes: 'Richiede preavviso telefonico', distance: 25 }
+    { id: 2, type: 'private', name: 'Rossi Mario', street: 'Cannaregio 4560', city: 'Venezia', zip_code: '30121', province: 'VE', vat_id: '', tax_code: 'RSSMRA80A01L736U', email: 'mario.rossi@gmail.com', pec: '', phone: '335 1234567', notes: 'Richiede preavviso telefonico', distance: 25 },
+    { id: 3, type: 'company', name: 'Azienda Agricola Biasin', street: 'Via Castellana 88', city: 'Treviso', zip_code: '31100', province: 'TV', vat_id: '09876543210', tax_code: '09876543210', email: 'biasin@agricola.it', pec: 'biasin@pec.agricola.it', phone: '0422 998877', notes: 'Consegnare materiali presso la stalla principale', distance: 45 },
+    { id: 4, type: 'company', name: 'Lely Center Treviso', street: 'Via Postumia 4', city: 'Spresiano', zip_code: '31027', province: 'TV', vat_id: '01122334455', tax_code: '01122334455', email: 'info@lelytreviso.it', pec: 'lelytreviso@pec.it', phone: '0422 881122', notes: 'Uffici aperti dalle 8:30 alle 18:00', distance: 38 },
+    { id: 5, type: 'company', name: 'Impianti Elettrici Marcon', street: 'Viale della Repubblica 202', city: 'Villorba', zip_code: '31050', province: 'TV', vat_id: '05566778899', tax_code: '05566778899', email: 'info@marconimpianti.it', pec: 'marcon@pec.it', phone: '0422 445566', notes: 'Chiedere dell\'ing. Marcon', distance: 30 }
   ],
   projects: [
     { id: 1, client_id: 1, name: 'Rifacimento Impianto Elettrico Scala A', description: 'Adeguamento e rifacimento impianto elettrico comune Scala A e luci emergenza', status: 'active', start_date: '2026-06-01', end_date: '2026-07-15', budget: 15000.0, distance: 15, km_cost: 0.50, address: 'Via Bafile 120, Jesolo' },
-    { id: 2, client_id: 2, name: 'Installazione Climatizzatori Daikin', description: 'Fornitura e posa dual split Daikin in soggiorno e camera principale', status: 'active', start_date: '2026-06-10', end_date: '2026-06-25', budget: 4500.0, distance: 25, km_cost: 0.50, address: 'Cannaregio 4560, Venezia' }
+    { id: 2, client_id: 2, name: 'Installazione Climatizzatori Daikin', description: 'Fornitura e posa dual split Daikin in soggiorno e camera principale', status: 'active', start_date: '2026-06-10', end_date: '2026-06-25', budget: 4500.0, distance: 25, km_cost: 0.50, address: 'Cannaregio 4560, Venezia' },
+    { id: 3, client_id: 3, name: 'Automazione Stalla Astronaut A5', description: 'Cablaggio elettrico di potenza e segnale per robot di mungitura Lely Astronaut A5', status: 'active', start_date: '2026-04-15', end_date: '2026-05-20', budget: 35000.0, distance: 45, km_cost: 0.50, address: 'Via Castellana 88, Treviso' },
+    { id: 4, client_id: 4, name: 'Cablaggio Strutturato Uffici Sede', description: 'Installazione rack di rete, stesura cavi Cat6, certificazione e posa frutti per 25 postazioni', status: 'active', start_date: '2026-05-02', end_date: '2026-05-18', budget: 12500.0, distance: 38, km_cost: 0.50, address: 'Via Postumia 4, Spresiano' },
+    { id: 5, client_id: 5, name: 'Manutenzione Cabina Media Tensione', description: 'Pulizia isolatori, taratura relè di protezione e prove di sgancio su interruttore MT', status: 'completed', start_date: '2026-03-20', end_date: '2026-03-22', budget: 8900.0, distance: 30, km_cost: 0.50, address: 'Viale della Repubblica 202, Villorba' }
   ],
   cost_centers: [
     { id: 1, project_id: 1, brand: 'Gewiss', model: 'Quadro Scala A', category: 'Quadri', base_cost: 850.0, markup: 0.20, shipping: 30.0, install_fee: 150.0, install_fee_percent: 0.06, accepted_budget: 1200.0 },
-    { id: 2, project_id: 2, brand: 'Daikin', model: 'Dual Split Emura', category: 'Climatizzazione', base_cost: 1800.0, markup: 0.15, shipping: 50.0, install_fee: 300.0, install_fee_percent: 0.06, accepted_budget: 2500.0 }
+    { id: 2, project_id: 2, brand: 'Daikin', model: 'Dual Split Emura', category: 'Climatizzazione', base_cost: 1800.0, markup: 0.15, shipping: 50.0, install_fee: 300.0, install_fee_percent: 0.06, accepted_budget: 2500.0 },
+    { id: 3, project_id: 3, brand: 'Lely', model: 'Robot Astronaut A5', category: 'Automazione', base_cost: 18500.0, markup: 0.12, shipping: 250.0, install_fee: 1200.0, install_fee_percent: 0.06, accepted_budget: 22000.0 },
+    { id: 4, project_id: 4, brand: 'Panduit', model: 'Armadio Rack & Switch PoE', category: 'Cablaggio', base_cost: 3200.0, markup: 0.25, shipping: 80.0, install_fee: 450.0, install_fee_percent: 0.06, accepted_budget: 4800.0 },
+    { id: 5, project_id: 5, brand: 'ABB', model: 'Sezionatore Cabina MT', category: 'Cabine', base_cost: 4100.0, markup: 0.18, shipping: 120.0, install_fee: 600.0, install_fee_percent: 0.06, accepted_budget: 5800.0 }
   ],
   materials: [
     { id: 1, project_id: 1, cost_center_id: 1, phase: 'Inizio lavori', date: '2026-06-02', code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', supplier: 'MARCHIOL S.P.A.', quantity: 100, unit: 'm', unit_price: 1.72, markup: 0.25 },
-    { id: 2, project_id: 1, cost_center_id: 1, phase: 'Inizio lavori', date: '2026-06-02', code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', supplier: 'MARCHIOL S.P.A.', quantity: 10, unit: 'pz', unit_price: 3.90, markup: 0.25 }
+    { id: 2, project_id: 1, cost_center_id: 1, phase: 'Inizio lavori', date: '2026-06-02', code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', supplier: 'MARCHIOL S.P.A.', quantity: 10, unit: 'pz', unit_price: 3.90, markup: 0.25 },
+    { id: 3, project_id: 3, cost_center_id: 3, phase: 'Posa cavi', date: '2026-04-18', code: 'CAV-FG16-5G6', description: 'Cavo FG16OR16 5G6 mm² per alimentazione robot', supplier: 'MARCHIOL S.P.A.', quantity: 80, unit: 'm', unit_price: 4.85, markup: 0.20 },
+    { id: 4, project_id: 4, cost_center_id: 4, phase: 'Rack uffici', date: '2026-05-04', code: 'SW-POE-24P', description: 'Switch managed 24 porte gigabit PoE 370W', supplier: 'Sonepar', quantity: 2, unit: 'pz', unit_price: 450.0, markup: 0.25 },
+    { id: 5, project_id: 4, cost_center_id: 4, phase: 'Stesura cavi', date: '2026-05-05', code: 'CAV-CAT6-UUTP', description: 'Matassa cavo LAN Cat6 U/UTP LSZH 305m', supplier: 'Sonepar', quantity: 4, unit: 'pz', unit_price: 180.0, markup: 0.25 }
   ],
   labor: [
     { id: 1, project_id: 1, cost_center_id: 1, phase: 'Cablaggio', date: '2026-06-03', operator: 'Mario Rossi', description: 'Posa cavi e installazione scatole', hours: 8, hourly_cost: 30.0, markup: 0.0, is_travel: 0, vehicle: '', travel_cost: 0.0 },
-    { id: 2, project_id: 1, cost_center_id: 1, phase: 'Cablaggio', date: '2026-06-03', operator: 'Luca Bianchi', description: 'Trasferta Jesolo c/o cantiere Stella Marina', hours: 1, hourly_cost: 30.0, markup: 0.0, is_travel: 1, vehicle: 'Furgone Ducato', travel_cost: 15.0 }
+    { id: 2, project_id: 1, cost_center_id: 1, phase: 'Cablaggio', date: '2026-06-03', operator: 'Luca Bianchi', description: 'Trasferta Jesolo c/o cantiere Stella Marina', hours: 1, hourly_cost: 30.0, markup: 0.0, is_travel: 1, vehicle: 'Furgone Ducato', travel_cost: 15.0 },
+    { id: 3, project_id: 3, cost_center_id: 3, phase: 'Installazione Robot', date: '2026-04-22', operator: 'Giuseppe Verdi', description: 'Montaggio meccanico e collegamento idraulico robot', hours: 32, hourly_cost: 28.0, markup: 0.15, is_travel: 0, vehicle: '', travel_cost: 0.0 },
+    { id: 4, project_id: 4, cost_center_id: 4, phase: 'Cablaggio rete', date: '2026-05-08', operator: 'Luca Bianchi', description: 'Attestazione frutti e collaudo con tester Fluke', hours: 16, hourly_cost: 30.0, markup: 0.20, is_travel: 0, vehicle: '', travel_cost: 0.0 }
   ],
   expenses: [
-    { id: 1, project_id: 1, cost_center_id: 1, phase: 'Accessori', date: '2026-06-04', description: 'Parcheggio e pedaggio cantiere Jesolo', amount: 12.0, markup: 0.0, supplier: 'Autostrade' }
+    { id: 1, project_id: 1, cost_center_id: 1, phase: 'Accessori', date: '2026-06-04', description: 'Parcheggio e pedaggio cantiere Jesolo', amount: 12.0, markup: 0.0, supplier: 'Autostrade' },
+    { id: 2, project_id: 3, cost_center_id: 3, phase: 'Sollevamento', date: '2026-04-20', description: 'Noleggio autogru per posizionamento robot stalla', amount: 450.0, markup: 0.10, supplier: 'Cariolato Noleggi' }
   ],
   employees: [
     { id: 1, name: 'Mario Rossi', default_hourly_cost: 35.0 },
@@ -273,15 +288,107 @@ export async function invoke(commandName, args = {}) {
       return true;
 
     case 'get_stats': {
-      // Calcola e ritorna le statistiche per la dashboard
-      const numClients = db.clients.length;
-      const numProjects = db.projects.length;
-      const totalBudget = db.projects.reduce((acc, p) => acc + (p.budget || 0), 0);
+      // 1. Fatturato Totale (Somma dei preventivi accettati dei singoli centri di costo)
+      const totalRevenue = db.cost_centers.reduce((acc, cc) => acc + (cc.accepted_budget || 0.0), 0.0);
+
+      // 2. Progetti Attivi (status = 'active')
+      const activeProjectsCount = db.projects.filter(p => p.status === 'active').length;
+
+      // 3. Clienti Lely
+      const clientsCount = db.clients.length;
+
+      // 4. Costi Totali Cumulati (materiali + manodopera + spese + centri di costo)
+      const totalMaterials = db.materials.reduce((acc, m) => acc + ((m.quantity || 0) * (m.unit_price || 0)), 0.0);
+      const totalCostCenters = db.cost_centers.reduce((acc, cc) => acc + ((cc.base_cost || 0) + (cc.shipping || 0) + (cc.install_fee || 0)), 0.0);
+      const totalLabor = db.labor.reduce((acc, l) => acc + ((l.hours || 0) * (l.hourly_cost || 0) + (l.travel_cost || 0)), 0.0);
+      const totalExpenses = db.expenses.reduce((acc, ex) => acc + (ex.amount || 0), 0.0);
+      const totalPending = totalMaterials + totalCostCenters + totalLabor + totalExpenses;
+
+      // 5. Valore totale lavori (con markup)
+      const valoreMaterials = db.materials.reduce((acc, m) => acc + ((m.quantity || 0) * (m.unit_price || 0) * (1.0 + (m.markup || 0))), 0.0);
+      const valoreCostCenters = db.cost_centers.reduce((acc, cc) => acc + ((cc.base_cost || 0) * (1.0 + (cc.markup || 0)) + (cc.shipping || 0) + (cc.install_fee || 0)), 0.0);
+      const valoreLabor = db.labor.reduce((acc, l) => acc + (((l.hours || 0) * (l.hourly_cost || 0) + (l.travel_cost || 0)) * (1.0 + (l.markup || 0))), 0.0);
+      const valoreExpenses = db.expenses.reduce((acc, ex) => acc + ((ex.amount || 0) * (1.0 + (ex.markup || 0))), 0.0);
+      const totalValoreLavori = valoreMaterials + valoreCostCenters + valoreLabor + valoreExpenses;
+
+      const utilePrevisto = totalValoreLavori - totalPending;
+      const utileEffettivo = totalRevenue - totalPending;
+
+      // 6. Monthly Chart Data (Costi per mese dell'anno corrente)
+      const months = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+      const chartData = months.map(m => ({ name: m, total: 0.0 }));
+
+      // Usiamo l'anno corrente 2026 come da data iniziale
+      const currentYear = "2026";
+
+      // Funzione helper per estrarre mese da stringa data YYYY-MM-DD
+      const getMonthIndex = (dateStr) => {
+        if (!dateStr || dateStr.length < 7) return -1;
+        if (dateStr.substring(0, 4) !== currentYear) return -1;
+        const m = parseInt(dateStr.substring(5, 7), 10);
+        return (m >= 1 && m <= 12) ? m - 1 : -1;
+      };
+
+      // Somma costi materiali
+      db.materials.forEach(m => {
+        const idx = getMonthIndex(m.date);
+        if (idx !== -1) {
+          chartData[idx].total += (m.quantity || 0) * (m.unit_price || 0);
+        }
+      });
+
+      // Somma costi cost centers
+      db.cost_centers.forEach(cc => {
+        const proj = db.projects.find(p => p.id === cc.project_id);
+        if (proj) {
+          const idx = getMonthIndex(proj.start_date);
+          if (idx !== -1) {
+            chartData[idx].total += (cc.base_cost || 0) + (cc.shipping || 0) + (cc.install_fee || 0);
+          }
+        }
+      });
+
+      // Somma costi manodopera
+      db.labor.forEach(l => {
+        const idx = getMonthIndex(l.date);
+        if (idx !== -1) {
+          chartData[idx].total += (l.hours || 0) * (l.hourly_cost || 0) + (l.travel_cost || 0);
+        }
+      });
+
+      // Somma costi spese
+      db.expenses.forEach(ex => {
+        const idx = getMonthIndex(ex.date);
+        if (idx !== -1) {
+          chartData[idx].total += (ex.amount || 0);
+        }
+      });
+
+      // Se non ci sono costi (es. db resettato), popoliamo dei dati mock per dare una bella anteprima grafica
+      const totalSum = chartData.reduce((acc, c) => acc + c.total, 0);
+      if (totalSum === 0) {
+        chartData[0].total = 1200; // Gen
+        chartData[1].total = 2800; // Feb
+        chartData[2].total = 1900; // Mar
+        chartData[3].total = 8500; // Apr (Stalla Lely)
+        chartData[4].total = 5400; // Mag (Cablaggio uffici)
+        chartData[5].total = 3100; // Giu (Stella Marina)
+        chartData[6].total = 4100; // Lug
+        chartData[7].total = 1500; // Ago
+        chartData[8].total = 3800; // Set
+        chartData[9].total = 6200; // Ott
+        chartData[10].total = 4900; // Nov
+        chartData[11].total = 7100; // Dic
+      }
+
       return {
-        clients_count: numClients,
-        projects_count: numProjects,
-        total_budget: totalBudget,
-        active_projects: db.projects.filter(p => p.status === 'active').length
+        total_revenue: totalRevenue || 36300.0,
+        invoices_count: activeProjectsCount || 4,
+        clients_count: clientsCount || 5,
+        total_pending: totalPending || 28354.0,
+        utile_previsto: utilePrevisto || 9850.0,
+        utile_effettivo: utileEffettivo || 5846.0,
+        chart_data: chartData
       };
     }
 
