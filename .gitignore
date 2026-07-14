@@ -33,3 +33,9 @@ src-tauri/gen
 .idea
 *.swp
 *.swo
+
+# Temporary and Build artifacts
+x max - DB CONTABILITÀ.xlsx
+PDF esempio (eliminare a test finiti)
+*.tar.gz
+*.sig
