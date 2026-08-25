@@ -121,7 +121,7 @@ const EmailSettings = () => {
           <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl"><Tag size={22} /></div>
           <div>
             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Guida ai Segnaposto Email</h3>
-            <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Clicca su un codice per copiarlo e usarlo nei testi</p>
+            <p className="text-[0.75rem] font-bold text-slate-400 uppercase tracking-widest">Clicca su un codice per copiarlo e usarlo nei testi</p>
           </div>
         </div>
 
@@ -133,7 +133,7 @@ const EmailSettings = () => {
               className="flex flex-col gap-1 p-4 bg-white/50 rounded-2xl border border-slate-100 hover:border-[#8bc53f] hover:bg-[#8bc53f]/5 cursor-pointer transition-all group"
             >
               <code className="text-sm font-black text-[#8bc53f] group-hover:scale-105 transition-transform">{item.tag}</code>
-              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-tight">{item.label}</span>
+              <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-tight">{item.label}</span>
             </div>
           ))}
         </div>
@@ -182,7 +182,7 @@ const EmailSettings = () => {
         />
 
         <div className="space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
             <MessageSquare size={12} /> Corpo del Messaggio
           </label>
           <AutocompleteTextarea 
@@ -204,12 +204,12 @@ const EmailSettings = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <h4 className="text-[0.65rem] font-black uppercase tracking-widest text-[#8bc53f]">1° Sollecito</h4>
+            <h4 className="text-[0.75rem] font-black uppercase tracking-widest text-[#8bc53f]">1° Sollecito</h4>
             <AutocompleteInput label="Oggetto" name="mail_remind_1_subject" value={globalSettings.mail_remind_1_subject} onChange={handleGlobalChange} icon={Tag} tags={availableTags} />
             <AutocompleteTextarea name="mail_remind_1_body" value={globalSettings.mail_remind_1_body} onChange={handleGlobalChange} rows={4} placeholder="Corpo del 1° sollecito..." tags={availableTags} />
           </div>
           <div className="space-y-4">
-            <h4 className="text-[0.65rem] font-black uppercase tracking-widest text-orange-500">2° Sollecito</h4>
+            <h4 className="text-[0.75rem] font-black uppercase tracking-widest text-orange-500">2° Sollecito</h4>
             <AutocompleteInput label="Oggetto" name="mail_remind_2_subject" value={globalSettings.mail_remind_2_subject} onChange={handleGlobalChange} icon={Tag} tags={availableTags} />
             <AutocompleteTextarea name="mail_remind_2_body" value={globalSettings.mail_remind_2_body} onChange={handleGlobalChange} rows={4} placeholder="Corpo del 2° sollecito..." tags={availableTags} />
           </div>

@@ -19,7 +19,9 @@ import {
   User,
   Clock,
   Save,
-  MessageSquare
+  MessageSquare,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
 import Card from './ui/Card'
 import ConfirmModal from './ui/ConfirmModal'
@@ -28,6 +30,7 @@ import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
 import Select from './ui/Select'
 import EditClientDrawer from './EditClientDrawer'
+import useAutocomplete from '../hooks/useAutocomplete'
 
 const Quotes = () => {
   const [quotes, setQuotes] = useState([])
@@ -55,10 +58,15 @@ const Quotes = () => {
   const [initialQuoteMeta, setInitialQuoteMeta] = useState(null)
   const [quoteItems, setQuoteItems] = useState([])
 
-  // Search/Autocomplete catalog state
-  const [catalogSuggestions, setCatalogSuggestions] = useState([])
-  const [showCatalogDropdown, setShowCatalogDropdown] = useState(false)
-  const [activeField, setActiveField] = useState(null) // 'code' or 'description'
+  // Autocomplete sul listino: stessa logica (debounce + scarto delle risposte
+  // fuori ordine) usata da MaterialsTab.
+  const {
+    suggestions: catalogSuggestions,
+    activeField,
+    requestSuggestions,
+    clear: clearCatalogSuggestions,
+  } = useAutocomplete()
+  const showCatalogDropdown = activeField !== null && catalogSuggestions.length > 0
   const dropdownRef = useRef(null)
 
   // Nuovo Articolo panel form state
@@ -84,6 +92,9 @@ const Quotes = () => {
     existingIndex: null,
     existingItem: null
   })
+
+  // Esito dell'ultimo salvataggio: 'idle' | 'saving' | 'saved' | 'error'.
+  const [saveStatus, setSaveStatus] = useState('idle')
 
   // Status configuration for the select dropdown
   const statusOptions = [
@@ -123,50 +134,21 @@ const Quotes = () => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowCatalogDropdown(false)
+        clearCatalogSuggestions()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Autocomplete code change handler
-  const handleCodeChange = async (val) => {
-    setNewRowData(prev => ({ ...prev, code: val }))
-    if (val.trim().length >= 2) {
-      try {
-        const matches = await invoke('search_catalog_materials', { query: val })
-        setCatalogSuggestions(matches)
-        setActiveField('code')
-        setShowCatalogDropdown(true)
-      } catch (err) {
-        console.error("Errore ricerca codice:", err)
-      }
-    } else {
-      setCatalogSuggestions([])
-      setShowCatalogDropdown(false)
-      setActiveField(null)
-    }
+  /** onChange di un campo con suggerimenti dal listino. */
+  const makeCatalogChangeHandler = (fieldName) => (val) => {
+    setNewRowData(prev => ({ ...prev, [fieldName]: val }))
+    requestSuggestions(fieldName, val, 'catalog')
   }
 
-  // Autocomplete description change handler
-  const handleDescriptionChange = async (val) => {
-    setNewRowData(prev => ({ ...prev, description: val }))
-    if (val.trim().length >= 2) {
-      try {
-        const matches = await invoke('search_catalog_materials', { query: val })
-        setCatalogSuggestions(matches)
-        setActiveField('description')
-        setShowCatalogDropdown(true)
-      } catch (err) {
-        console.error("Errore ricerca descrizione:", err)
-      }
-    } else {
-      setCatalogSuggestions([])
-      setShowCatalogDropdown(false)
-      setActiveField(null)
-    }
-  }
+  const handleCodeChange = makeCatalogChangeHandler('code')
+  const handleDescriptionChange = makeCatalogChangeHandler('description')
 
   // Select catalog item suggestion
   const handleSelectCatalogSuggestion = (material) => {
@@ -178,13 +160,12 @@ const Quotes = () => {
       unit_price: Math.round((material.unit_price || 0) * 100) / 100,
       markup: material.markup !== undefined ? material.markup : 0.25
     }))
-    setCatalogSuggestions([])
-    setShowCatalogDropdown(false)
-    setActiveField(null)
+    clearCatalogSuggestions()
   }
 
   const saveQuoteSilently = async (meta, items) => {
     if (!meta.id || !meta.client_id || !meta.title.trim() || !meta.created_at) return
+    setSaveStatus('saving')
     try {
       const quoteData = {
         id: meta.id,
@@ -196,8 +177,10 @@ const Quotes = () => {
       }
       await invoke('save_quote', { quote: quoteData, items })
       await loadData()
+      setSaveStatus('saved')
     } catch (err) {
       console.error("Errore nel salvataggio automatico del preventivo:", err)
+      setSaveStatus('error')
     }
   }
 
@@ -214,9 +197,7 @@ const Quotes = () => {
       quantity: 1,
       markup: 0.25
     })
-    setActiveField(null)
-    setCatalogSuggestions([])
-    setShowCatalogDropdown(false)
+    clearCatalogSuggestions()
 
     await saveQuoteSilently(quoteMeta, updatedItems)
   }
@@ -246,9 +227,7 @@ const Quotes = () => {
       quantity: 1,
       markup: 0.25
     })
-    setActiveField(null)
-    setCatalogSuggestions([])
-    setShowCatalogDropdown(false)
+    clearCatalogSuggestions()
 
     await saveQuoteSilently(quoteMeta, updatedItems)
   }
@@ -280,9 +259,7 @@ const Quotes = () => {
       quantity: 1,
       markup: 0.25
     })
-    setActiveField(null)
-    setCatalogSuggestions([])
-    setShowCatalogDropdown(false)
+    clearCatalogSuggestions()
 
     await saveQuoteSilently(quoteMeta, updatedItems)
   }
@@ -332,27 +309,6 @@ const Quotes = () => {
     }
 
     await proceedAddRow(newItem)
-  }
-
-  // Remove row item
-  const handleRemoveItem = (index) => {
-    setQuoteItems(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Update item field
-  const handleItemFieldChange = (index, field, value) => {
-    setQuoteItems(prev => prev.map((item, i) => {
-      if (i === index) {
-        let val = value
-        if (field === 'quantity' || field === 'unit_price') {
-          val = parseFloat(value) || 0
-        } else if (field === 'markup') {
-          val = (parseFloat(value) || 0) / 100
-        }
-        return { ...item, [field]: val }
-      }
-      return item
-    }))
   }
 
   // Inline editing for quote items
@@ -456,6 +412,7 @@ const Quotes = () => {
       return
     }
 
+    setSaveStatus('saving')
     try {
       const quoteData = {
         id: quoteMeta.id,
@@ -465,17 +422,21 @@ const Quotes = () => {
         status: quoteMeta.status,
         created_at: quoteMeta.created_at
       }
-      
+
       await invoke('save_quote', { quote: quoteData, items: quoteItems })
       await loadData()
-      
+
       // Refresh current details
       const details = await invoke('get_quote_details', { quoteId: quoteMeta.id })
       setQuoteItems(details.items || [])
-      
-      alert("Preventivo salvato con successo!")
+
+      // Il riscontro e' l'indicatore accanto al pulsante: una finestra da
+      // chiudere a ogni salvataggio interromperebbe il lavoro invece di
+      // rassicurare.
+      setSaveStatus('saved')
     } catch (err) {
       console.error("Errore salvataggio preventivo:", err)
+      setSaveStatus('error')
       alert("Errore nel salvataggio del preventivo: " + err)
     }
   }
@@ -610,11 +571,11 @@ const Quotes = () => {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'accepted':
-        return <span className="inline-flex items-center gap-1 text-[0.6rem] font-black uppercase px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 font-bold">Accettato</span>
+        return <span className="inline-flex items-center gap-1 text-[0.72rem] font-black uppercase px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 font-bold">Accettato</span>
       case 'rejected':
-        return <span className="inline-flex items-center gap-1 text-[0.6rem] font-black uppercase px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full border border-rose-100 font-bold">Rifiutato</span>
+        return <span className="inline-flex items-center gap-1 text-[0.72rem] font-black uppercase px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full border border-rose-100 font-bold">Rifiutato</span>
       default:
-        return <span className="inline-flex items-center gap-1 text-[0.6rem] font-black uppercase px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100 font-bold">Bozza</span>
+        return <span className="inline-flex items-center gap-1 text-[0.72rem] font-black uppercase px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100 font-bold">Bozza</span>
     }
   }
 
@@ -675,19 +636,46 @@ const Quotes = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Il preventivo si salva da solo a ogni modifica, ma prima non
+                lo diceva a nessuno: senza riscontro non si sa se il lavoro
+                e' al sicuro. */}
+            <span className={`flex items-center gap-1.5 text-[0.75rem] font-bold transition-colors ${
+              saveStatus === 'error' ? 'text-rose-600'
+                : saveStatus === 'saving' ? 'text-slate-500'
+                : saveStatus === 'saved' ? 'text-emerald-600'
+                : 'text-transparent'
+            }`}>
+              {saveStatus === 'saving' && <Loader2 size={14} className="animate-spin" />}
+              {saveStatus === 'saved' && <Check size={14} />}
+              {saveStatus === 'error' && <AlertCircle size={14} />}
+              {saveStatus === 'saving' ? 'Salvataggio…'
+                : saveStatus === 'saved' ? 'Salvato'
+                : saveStatus === 'error' ? 'Non salvato'
+                : '—'}
+            </span>
+
+            <button
+              onClick={handleSaveItems}
+              className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
+              title="Salva subito il preventivo"
+            >
+              <Save size={14} />
+              Salva
+            </button>
+
             <button
               onClick={() => {
                 setInitialQuoteMeta(quoteMeta)
                 setIsEditorOpen(true)
               }}
-              className="px-5 py-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-[0.65rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5 font-bold"
+              className="px-5 py-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5 font-bold"
             >
               <Edit size={14} />
               Modifica Intestazione
             </button>
             <button
               onClick={() => setDeleteModal({ isOpen: true, quoteId: quoteMeta.id })}
-              className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-xl text-[0.65rem] font-black uppercase tracking-widest shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5 font-bold"
+              className="px-5 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5 font-bold"
               title="Elimina Preventivo"
             >
               <Trash2 size={14} />
@@ -700,18 +688,18 @@ const Quotes = () => {
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-[2.5rem] p-8 shadow-xl">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-white/10 text-center">
               <div className="space-y-2">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Costo Totale Materiali</span>
+                <span className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400">Costo Totale Materiali</span>
                 <p className="text-2xl font-black">{formatEuro(totals.cost)}</p>
               </div>
               <div className="space-y-2 pt-4 md:pt-0">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Valore Vendita (Preventivo)</span>
+                <span className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400">Valore Vendita (Preventivo)</span>
                 <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.sale)}</p>
               </div>
               <div className="space-y-2 pt-4 md:pt-0">
-                <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Margine Stimato</span>
+                <span className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400">Margine Stimato</span>
                 <div className="flex items-center justify-center gap-2">
                   <p className="text-2xl font-black text-emerald-400">{formatEuro(totals.margin)}</p>
-                  <span className="text-[0.65rem] font-black px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">
+                  <span className="text-[0.75rem] font-black px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">
                     +{totals.marginPercent.toFixed(1)}%
                   </span>
                 </div>
@@ -727,10 +715,10 @@ const Quotes = () => {
               <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
                 <Plus size={14} className="stroke-[3]" />
               </div>
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-500">Nuovo Articolo</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest text-slate-500">Nuovo Articolo</span>
             </div>
             <div className="text-right">
-              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Riga (Vendita):</span>
+              <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Riga (Vendita):</span>
               <span className="text-sm font-black text-slate-800">
                 {formatEuro((newRowData.quantity || 0) * (newRowData.unit_price || 0) * (1 + (newRowData.markup || 0)))}
               </span>
@@ -740,7 +728,7 @@ const Quotes = () => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end" ref={dropdownRef}>
             {/* Codice */}
             <div className="md:col-span-2 space-y-1.5 relative">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Codice</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Codice</label>
               <input 
                 type="text" 
                 placeholder="Codice..."
@@ -748,7 +736,7 @@ const Quotes = () => {
                 onChange={(e) => handleCodeChange(e.target.value)}
                 onFocus={handleInputSelect}
                 onClick={handleInputSelect}
-                onBlur={() => setTimeout(() => setShowCatalogDropdown(false), 200)}
+                onBlur={() => setTimeout(() => clearCatalogSuggestions(), 200)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 transition-all"
                 autoComplete="off"
               />
@@ -766,7 +754,7 @@ const Quotes = () => {
                     >
                       <div className="space-y-0.5">
                         <span className="text-xs font-bold text-slate-800">{item.code || 'N/A'}</span>
-                        <span className="text-[0.65rem] text-slate-400 block truncate max-w-[120px]">{item.description}</span>
+                        <span className="text-[0.75rem] text-slate-400 block truncate max-w-[120px]">{item.description}</span>
                       </div>
                       <span className="text-xs font-bold text-emerald-600 font-bold">{formatEuro(item.unit_price)}</span>
                     </button>
@@ -777,7 +765,7 @@ const Quotes = () => {
 
             {/* Descrizione */}
             <div className="md:col-span-4 space-y-1.5 relative">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione Articolo *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione Articolo *</label>
               <input 
                 type="text" 
                 placeholder="Descrizione articolo..."
@@ -785,7 +773,7 @@ const Quotes = () => {
                 onChange={(e) => handleDescriptionChange(e.target.value)}
                 onFocus={handleInputSelect}
                 onClick={handleInputSelect}
-                onBlur={() => setTimeout(() => setShowCatalogDropdown(false), 200)}
+                onBlur={() => setTimeout(() => clearCatalogSuggestions(), 200)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 transition-all"
                 autoComplete="off"
               />
@@ -803,7 +791,7 @@ const Quotes = () => {
                     >
                       <div className="space-y-0.5">
                         <span className="text-xs font-bold text-slate-800 truncate block max-w-[200px]">{item.description}</span>
-                        <span className="text-[0.65rem] text-slate-400 block">{item.code || 'Senza Codice'}</span>
+                        <span className="text-[0.75rem] text-slate-400 block">{item.code || 'Senza Codice'}</span>
                       </div>
                       <span className="text-xs font-bold text-emerald-600 font-bold">{formatEuro(item.unit_price)}</span>
                     </button>
@@ -814,7 +802,7 @@ const Quotes = () => {
 
             {/* U.M. */}
             <div className="md:col-span-1 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">U.M.</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">U.M.</label>
               <input 
                 type="text" 
                 placeholder="pz"
@@ -828,7 +816,7 @@ const Quotes = () => {
 
             {/* Quantità */}
             <div className="md:col-span-1 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Q.tà *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Q.tà *</label>
               <input 
                 type="number" 
                 value={newRowData.quantity}
@@ -842,7 +830,7 @@ const Quotes = () => {
 
             {/* Costo Cad. */}
             <div className="md:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Cad. (€) *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Cad. (€) *</label>
               <div className="relative">
                 <Euro className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                 <input 
@@ -861,7 +849,7 @@ const Quotes = () => {
 
             {/* Rincaro (%) */}
             <div className="md:col-span-1 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Rinc. (%)</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Rinc. (%)</label>
               <div className="relative">
                 <Percent className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                 <input 
@@ -909,15 +897,15 @@ const Quotes = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 w-24">Codice</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Descrizione</th>
-                    <th className="py-4 px-3 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-center w-16">U.M.</th>
-                    <th className="py-4 px-3 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-center w-20">Q.tà</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-right w-28">Costo Cad.</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-center w-24">Rinc. (%)</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-right w-28">Vend. Cad.</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-right w-32">Vend. Totale</th>
-                    <th className="py-4 px-4 text-[0.55rem] font-black uppercase tracking-widest text-slate-400 text-right w-12"></th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 w-24">Codice</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Descrizione</th>
+                    <th className="py-4 px-3 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-center w-16">U.M.</th>
+                    <th className="py-4 px-3 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-center w-20">Q.tà</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-right w-28">Costo Cad.</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-center w-24">Rinc. (%)</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-right w-28">Vend. Cad.</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-right w-32">Vend. Totale</th>
+                    <th className="py-4 px-4 text-[0.7rem] font-black uppercase tracking-widest text-slate-400 text-right w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700 bg-white/10">
@@ -1040,7 +1028,7 @@ const Quotes = () => {
                       <tr key={idx} className="hover:bg-slate-50/20 transition-colors group">
                         {/* Codice */}
                         <td className="py-3 px-4">
-                          <span className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">{item.code || '-'}</span>
+                          <span className="text-[0.75rem] font-black text-slate-500 uppercase tracking-widest">{item.code || '-'}</span>
                         </td>
                         {/* Descrizione */}
                         <td className="py-3 px-4">
@@ -1142,7 +1130,7 @@ const Quotes = () => {
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
+                  <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
                   <ClientSelector 
                     clients={clients}
                     value={quoteMeta.client_id}
@@ -1152,7 +1140,7 @@ const Quotes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Preventivo *</label>
+                  <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Preventivo *</label>
                   <DatePicker 
                     value={quoteMeta.created_at} 
                     onChange={(val) => setQuoteMeta(p => ({ ...p, created_at: val }))}
@@ -1160,7 +1148,7 @@ const Quotes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Titolo Preventivo *</label>
+                  <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Titolo Preventivo *</label>
                   <div className="relative">
                     <FileText className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -1176,7 +1164,7 @@ const Quotes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato Preventivo *</label>
+                  <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato Preventivo *</label>
                   <Select
                     options={statusOptions}
                     value={quoteMeta.status}
@@ -1186,7 +1174,7 @@ const Quotes = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione / Note</label>
+                  <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione / Note</label>
                   <div className="relative">
                     <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
                     <textarea 
@@ -1276,7 +1264,7 @@ const Quotes = () => {
                       L'articolo con codice <strong className="text-slate-700">"{duplicateModal.newItem.code || 'N/A'}"</strong> e descrizione <strong className="text-slate-700">"{duplicateModal.newItem.description}"</strong> è già presente in questo preventivo.
                     </p>
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/80 space-y-1.5 text-xs">
-                      <p className="text-slate-400 font-bold uppercase tracking-wider text-[0.6rem]">Stato nel preventivo:</p>
+                      <p className="text-slate-400 font-bold uppercase tracking-wider text-[0.72rem]">Stato nel preventivo:</p>
                       <p className="font-bold text-slate-700">Quantità esistente: {duplicateModal.existingItem.quantity} {duplicateModal.existingItem.unit}</p>
                       <p className="font-bold text-accent">Nuova quantità da inserire: {duplicateModal.newItem.quantity} {duplicateModal.newItem.unit}</p>
                     </div>
@@ -1294,6 +1282,15 @@ const Quotes = () => {
                       className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all shadow-xl shadow-amber-500/20 cursor-pointer animate-none"
                     >
                       Sovrascrivi quantità (diventa {duplicateModal.newItem.quantity} {duplicateModal.newItem.unit})
+                    </button>
+                    {/* La terza scelta esisteva gia' come funzione ma non era
+                        collegata a nulla: due articoli con lo stesso codice e
+                        condizioni diverse sono un caso normale. */}
+                    <button
+                      onClick={handleDuplicateCreateNew}
+                      className="w-full py-4 bg-white border border-slate-200 text-slate-600 hover:border-accent/40 hover:text-accent rounded-2xl text-[0.7rem] font-black uppercase tracking-widest transition-all cursor-pointer"
+                    >
+                      Crea comunque una nuova riga
                     </button>
                     <button
                       onClick={() => setDuplicateModal(prev => ({ ...prev, isOpen: false }))}
@@ -1359,12 +1356,12 @@ const Quotes = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="py-4 px-8 text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Cliente</th>
-                  <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Titolo Preventivo</th>
-                  <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-center">Data</th>
-                  <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-center">Dettagli</th>
-                  <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-center">Stato</th>
-                  <th className="py-4 px-8 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Azioni</th>
+                  <th className="py-4 px-8 text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Cliente</th>
+                  <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Titolo Preventivo</th>
+                  <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-center">Data</th>
+                  <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-center">Dettagli</th>
+                  <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-center">Stato</th>
+                  <th className="py-4 px-8 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Azioni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
@@ -1448,7 +1445,7 @@ const Quotes = () => {
 
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
                 <ClientSelector 
                   clients={clients}
                   value={quoteMeta.client_id}
@@ -1458,7 +1455,7 @@ const Quotes = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Preventivo *</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Preventivo *</label>
                 <DatePicker 
                   value={quoteMeta.created_at} 
                   onChange={(val) => setQuoteMeta(p => ({ ...p, created_at: val }))}
@@ -1466,7 +1463,7 @@ const Quotes = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Titolo Preventivo *</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Titolo Preventivo *</label>
                 <div className="relative">
                   <FileText className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
@@ -1482,7 +1479,7 @@ const Quotes = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato Preventivo *</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato Preventivo *</label>
                 <Select
                   options={statusOptions}
                   value={quoteMeta.status}
@@ -1492,7 +1489,7 @@ const Quotes = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione / Note</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione / Note</label>
                 <div className="relative">
                   <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
                   <textarea 

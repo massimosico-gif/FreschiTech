@@ -11,33 +11,34 @@ import {
   AlertCircle
 } from 'lucide-react'
 import Card from '../ui/Card'
+import {
+  computeProjectTotals,
+  costCenterCost,
+  costCenterSale,
+  expenseCost,
+  expenseSale,
+  laborCost,
+  laborSale,
+  marginPercent,
+  materialCost,
+  materialSale,
+  parseNum,
+} from '../../utils/costing'
 
 const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
-  const parseNum = (val) => {
-    if (val === null || val === undefined) return 0;
-    const parsed = parseFloat(val);
-    return isNaN(parsed) ? 0 : parsed;
-  };
+  // Le formule economiche vivono in `utils/costing`: qui si aggrega soltanto.
+  const totals = useMemo(
+    () => computeProjectTotals({ costCenters, materials, labor, expenses }),
+    [costCenters, materials, labor, expenses]
+  )
 
-  // 1. Calculate overall totals for math sanity checks
-  const matTotalCost = useMemo(() => materials.reduce((acc, m) => acc + (parseNum(m.quantity) * parseNum(m.unit_price)), 0), [materials])
-  const matTotalSale = useMemo(() => materials.reduce((acc, m) => acc + (parseNum(m.quantity) * parseNum(m.unit_price) * (1 + parseNum(m.markup))), 0), [materials])
-  
-  const ccTotalCost = useMemo(() => costCenters.reduce((acc, cc) => acc + parseNum(cc.base_cost) + parseNum(cc.shipping) + parseNum(cc.install_fee), 0), [costCenters])
-  const ccTotalSale = useMemo(() => costCenters.reduce((acc, cc) => acc + parseNum(cc.base_cost) * (1 + parseNum(cc.markup)) + parseNum(cc.shipping) + parseNum(cc.install_fee), 0), [costCenters])
-  
-  const laborTotalCost = useMemo(() => labor.reduce((acc, l) => acc + (parseNum(l.hours) * parseNum(l.hourly_cost)) + parseNum(l.travel_cost), 0), [labor])
-  const laborTotalSale = useMemo(() => labor.reduce((acc, l) => acc + ((parseNum(l.hours) * parseNum(l.hourly_cost)) + parseNum(l.travel_cost)) * (1 + parseNum(l.markup)), 0), [labor])
-  
-  const expenseTotalCost = useMemo(() => expenses.reduce((acc, ex) => acc + parseNum(ex.amount), 0), [expenses])
-  const expenseTotalSale = useMemo(() => expenses.reduce((acc, ex) => acc + (parseNum(ex.amount) * (1 + parseNum(ex.markup))), 0), [expenses])
-  
-  const totalProjectCost = matTotalCost + ccTotalCost + laborTotalCost + expenseTotalCost
-  const totalProjectSale = matTotalSale + ccTotalSale + laborTotalSale + expenseTotalSale
+  const totalProjectCost = totals.costoTotale
+  const totalProjectSale = totals.valoreLavori
   const totalProjectMargin = totalProjectSale - totalProjectCost
-  const totalProjectMarginPerc = totalProjectSale > 0 ? (totalProjectMargin / totalProjectSale) * 100 : 0
-  const realProjectMargin = (project?.budget || 0) - totalProjectCost
-  const realProjectMarginPerc = (project?.budget || 0) > 0 ? (realProjectMargin / project.budget) * 100 : 0
+  const totalProjectMarginPerc = marginPercent(totalProjectCost, totalProjectSale)
+  const projectBudget = parseNum(project?.budget)
+  const realProjectMargin = projectBudget - totalProjectCost
+  const realProjectMarginPerc = projectBudget > 0 ? (realProjectMargin / projectBudget) * 100 : 0
 
   // 2. Aggregate data by Phase
   const phaseData = useMemo(() => {
@@ -67,8 +68,8 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
     // Add labor
     labor.forEach(l => {
       const phase = getOrCreatePhase(l.phase)
-      const cost = (parseNum(l.hours) * parseNum(l.hourly_cost)) + parseNum(l.travel_cost)
-      const sale = cost * (1 + parseNum(l.markup))
+      const cost = laborCost(l)
+      const sale = laborSale(l)
       phase.laborCost += cost
       phase.laborSale += sale
     })
@@ -76,8 +77,8 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
     // Add materials
     materials.forEach(m => {
       const phase = getOrCreatePhase(m.phase)
-      const cost = parseNum(m.quantity) * parseNum(m.unit_price)
-      const sale = cost * (1 + parseNum(m.markup))
+      const cost = materialCost(m)
+      const sale = materialSale(m)
       phase.materialCost += cost
       phase.materialSale += sale
     })
@@ -85,8 +86,8 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
     // Add expenses
     expenses.forEach(ex => {
       const phase = getOrCreatePhase(ex.phase)
-      const cost = parseNum(ex.amount)
-      const sale = cost * (1 + parseNum(ex.markup))
+      const cost = expenseCost(ex)
+      const sale = expenseSale(ex)
       phase.expenseCost += cost
       phase.expenseSale += sale
     })
@@ -198,8 +199,8 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
       ccCategoryMap[cc.id] = catName
       
       const cat = getOrCreateCategory(catName)
-      const ccSelfCost = parseNum(cc.base_cost) + parseNum(cc.shipping) + parseNum(cc.install_fee)
-      const ccSelfSale = parseNum(cc.base_cost) * (1 + parseNum(cc.markup)) + parseNum(cc.shipping) + parseNum(cc.install_fee)
+      const ccSelfCost = costCenterCost(cc)
+      const ccSelfSale = costCenterSale(cc)
       const ccSelfAccepted = parseNum(cc.accepted_budget)
       
       cat.ccSelfCost += ccSelfCost
@@ -259,7 +260,7 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card hoverEffect={false} className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 text-white">
           <div className="p-6 space-y-2">
-            <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-slate-400">Costo Totale Commessa</p>
+            <p className="text-[0.75rem] font-black uppercase tracking-[0.2em] text-slate-400">Costo Totale Commessa</p>
             <h3 className="text-3xl font-black">{formatEuro(totalProjectCost)}</h3>
             <div className="flex items-center gap-1.5 text-xs text-slate-400 pt-2 border-t border-white/10">
               <Activity size={12} className="text-accent" />
@@ -270,7 +271,7 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
 
         <Card hoverEffect={false} className="relative overflow-hidden bg-white border border-slate-100">
           <div className="p-6 space-y-2">
-            <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-slate-400">Preventivo Accettato</p>
+            <p className="text-[0.75rem] font-black uppercase tracking-[0.2em] text-slate-400">Preventivo Accettato</p>
             <h3 className="text-3xl font-black text-slate-800">{formatEuro(project?.budget || 0)}</h3>
             <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100">
               <span className="font-bold text-slate-500">Valore Teorico (Listino):</span>
@@ -281,7 +282,7 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
 
         <Card hoverEffect={false} className="relative overflow-hidden bg-white border border-slate-100">
           <div className="p-6 space-y-2">
-            <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-slate-400">Margine su Preventivo</p>
+            <p className="text-[0.75rem] font-black uppercase tracking-[0.2em] text-slate-400">Margine su Preventivo</p>
             <div className="flex items-baseline gap-2">
               <h3 className={`text-3xl font-black ${realProjectMargin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatEuro(realProjectMargin)}
@@ -368,30 +369,30 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
-                    <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Fase</th>
-                    <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
+                    <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Fase</th>
+                    <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
                       <span className="border-b border-dashed border-slate-200 pb-0.5">Manodopera</span>
-                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[10px] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
+                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[0.72rem] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
                         Include: ore di lavoro inserite e relativi costi trasferta dipendenti.
                       </div>
                     </th>
-                    <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
+                    <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
                       <span className="border-b border-dashed border-slate-200 pb-0.5">Materiali</span>
-                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[10px] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
+                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[0.72rem] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
                         Include: articoli da listino inseriti e costo base dei macchinari.
                       </div>
                     </th>
-                    <th className="py-4 px-6 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
+                    <th className="py-4 px-6 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right relative group cursor-help">
                       <span className="border-b border-dashed border-slate-200 pb-0.5">Spese</span>
-                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[10px] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
+                      <div className="absolute top-full right-6 mt-1 hidden group-hover:block w-56 bg-slate-950/95 backdrop-blur-md text-white text-[0.72rem] font-bold normal-case p-3.5 rounded-2xl shadow-xl z-50 text-left border border-white/10 leading-normal">
                         Include: spese vive di commessa, rimborso viaggi (km), trasporto macchinari e fee di montaggio.
                       </div>
                     </th>
-                    <th className="py-4 px-4 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Costo Tot.</th>
-                    <th className="py-4 px-4 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Vend. Listino</th>
-                    <th className="py-4 px-4 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Vend. Prev.</th>
-                    <th className="py-4 px-4 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Marg. Listino</th>
-                    <th className="py-4 px-4 text-[0.65rem] font-black uppercase tracking-widest text-slate-400 text-right">Marg. Prev.</th>
+                    <th className="py-4 px-4 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Costo Tot.</th>
+                    <th className="py-4 px-4 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Vend. Listino</th>
+                    <th className="py-4 px-4 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Vend. Prev.</th>
+                    <th className="py-4 px-4 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Marg. Listino</th>
+                    <th className="py-4 px-4 text-[0.75rem] font-black uppercase tracking-widest text-slate-400 text-right">Marg. Prev.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
@@ -401,13 +402,13 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
                     if (item.name === 'Costi Macchinari' && item.realMargin < 0) {
                       const over = item.realSale > 0 ? ((item.totalCost - item.realSale) / item.realSale * 100) : 0;
                       alertBadge = (
-                        <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-black uppercase px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100">
+                        <span className="inline-flex items-center gap-0.5 text-[0.7rem] font-black uppercase px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100">
                           Fuori Budget {over > 0 ? `(+${over.toFixed(0)}%)` : ''}
                         </span>
                       );
                     } else if (item.name !== 'Costi Macchinari' && item.margin < 0) {
                       alertBadge = (
-                        <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-black uppercase px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-lg border border-amber-100">
+                        <span className="inline-flex items-center gap-0.5 text-[0.7rem] font-black uppercase px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-lg border border-amber-100">
                           Esubero Risorse
                         </span>
                       );
@@ -486,19 +487,19 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
               <Card key={idx} hoverEffect={true} className="p-6 border border-slate-100 flex flex-col justify-between space-y-6">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between">
-                    <span className="text-[0.65rem] font-black uppercase tracking-widest px-3 py-1 bg-slate-100 text-slate-600 rounded-full">
+                    <span className="text-[0.75rem] font-black uppercase tracking-widest px-3 py-1 bg-slate-100 text-slate-600 rounded-full">
                       {cat.name}
                     </span>
                     {cat.realSale > 0 && cat.totalCost > cat.realSale ? (
-                      <span className="text-[0.55rem] font-black uppercase px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full border border-rose-100">
+                      <span className="text-[0.7rem] font-black uppercase px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full border border-rose-100">
                         ⚠️ FUORI BUDGET (+{(((cat.totalCost - cat.realSale)/cat.realSale)*100).toFixed(0)}%)
                       </span>
                     ) : cat.realSale === 0 && cat.totalCost > 0 ? (
-                      <span className="text-[0.55rem] font-black uppercase px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
+                      <span className="text-[0.7rem] font-black uppercase px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
                         ⚠️ COSTI EXTRA (NO PREV.)
                       </span>
                     ) : cat.count > 0 ? (
-                      <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">
+                      <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-widest">
                         {cat.count} {cat.count === 1 ? 'Centro' : 'Centri'}
                       </span>
                     ) : null}
@@ -508,15 +509,15 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
 
                 <div className="grid grid-cols-3 gap-2 py-4 border-y border-slate-50">
                   <div className="space-y-0.5">
-                    <span className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Costo Totale</span>
+                    <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Costo Totale</span>
                     <p className="text-xs font-black text-slate-700">{formatEuro(cat.totalCost)}</p>
                   </div>
                   <div className="space-y-0.5">
-                    <span className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Vend. Listino</span>
+                    <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Vend. Listino</span>
                     <p className="text-xs font-black text-slate-500">{formatEuro(cat.totalSale)}</p>
                   </div>
                   <div className="space-y-0.5">
-                    <span className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Vend. Prev.</span>
+                    <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Vend. Prev.</span>
                     <p className="text-xs font-black text-emerald-600">{formatEuro(cat.realSale)}</p>
                   </div>
                 </div>
@@ -524,16 +525,16 @@ const AnalyticsTab = ({ labor, materials, expenses, costCenters, project }) => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <span className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400">Marg. Prev.</span>
+                      <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400">Marg. Prev.</span>
                       <p className={`text-sm font-black ${cat.realMargin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {formatEuro(cat.realMargin)}
                       </p>
                     </div>
-                    <span className={`text-[0.6rem] font-black px-1.5 py-0.5 rounded-lg ${cat.realMargin >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                    <span className={`text-[0.72rem] font-black px-1.5 py-0.5 rounded-lg ${cat.realMargin >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                       {realMarginPerc >= 0 ? '+' : ''}{realMarginPerc.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-slate-50 pt-2 text-[0.6rem]">
+                  <div className="flex items-center justify-between border-t border-slate-50 pt-2 text-[0.72rem]">
                     <span className="font-bold text-slate-400">MARG. LISTINO:</span>
                     <span className={`font-black ${cat.margin >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                       {formatEuro(cat.margin)} ({marginPerc >= 0 ? '+' : ''}{marginPerc.toFixed(1)}%)

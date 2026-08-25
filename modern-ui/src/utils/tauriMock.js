@@ -64,6 +64,17 @@ const INITIAL_DB = {
   quote_items: []
 };
 
+/**
+ * Filtra per commessa, come fanno le query del backend Rust.
+ *
+ * Senza questo filtro l'anteprima web mostrava in ogni commessa i materiali,
+ * le ore e le spese di tutte le altre: i totali risultavano identici ovunque.
+ */
+function byProject(rows, projectId) {
+  if (!projectId) return rows;
+  return rows.filter(row => Number(row.project_id) === Number(projectId));
+}
+
 // Funzione di lettura helper
 function loadDB() {
   const data = localStorage.getItem(MOCK_STORAGE_KEY);
@@ -73,7 +84,7 @@ function loadDB() {
   }
   try {
     return JSON.parse(data);
-  } catch (e) {
+  } catch {
     return JSON.parse(JSON.stringify(INITIAL_DB));
   }
 }
@@ -131,9 +142,13 @@ export async function invoke(commandName, args = {}) {
       return true;
 
     case 'get_cost_centers':
-      return db.cost_centers;
+      // Il comando Rust filtra per commessa: senza questo filtro l'anteprima
+      // web mostrava i centri di costo di tutte le commesse in ognuna.
+      return args.projectId
+        ? db.cost_centers.filter(cc => Number(cc.project_id) === Number(args.projectId))
+        : db.cost_centers;
     case 'save_cost_center': {
-      const cc = args.costCenter;
+      const cc = args.cc;
       if (!cc.id) {
         cc.id = db.cost_centers.length > 0 ? Math.max(...db.cost_centers.map(x => x.id)) + 1 : 1;
         db.cost_centers.push(cc);
@@ -152,9 +167,11 @@ export async function invoke(commandName, args = {}) {
       return true;
 
     case 'get_materials':
-      return db.materials;
+      return byProject(db.materials, args.projectId);
     case 'save_material': {
-      const mat = args.material;
+      // Il comando Rust si chiama `mat`, non `material`: con la chiave
+      // sbagliata l'anteprima web falliva su ogni salvataggio di materiale.
+      const mat = args.mat;
       if (!mat.id) {
         mat.id = db.materials.length > 0 ? Math.max(...db.materials.map(x => x.id)) + 1 : 1;
         db.materials.push(mat);
@@ -170,7 +187,7 @@ export async function invoke(commandName, args = {}) {
       return true;
 
     case 'get_labor':
-      return db.labor;
+      return byProject(db.labor, args.projectId);
     case 'save_labor': {
       const lab = args.labor;
       if (!lab.id) {
@@ -188,7 +205,7 @@ export async function invoke(commandName, args = {}) {
       return true;
 
     case 'get_expenses':
-      return db.expenses;
+      return byProject(db.expenses, args.projectId);
     case 'save_expense': {
       const exp = args.expense;
       if (!exp.id) {
@@ -359,7 +376,7 @@ export async function invoke(commandName, args = {}) {
       }
       // Pulisce e ricrea gli item del preventivo
       db.quote_items = db.quote_items.filter(i => i.quote_id !== quote.id);
-      items.forEach((item, idx) => {
+      items.forEach(item => {
         item.id = db.quote_items.length > 0 ? Math.max(...db.quote_items.map(x => x.id)) + 1 : 1;
         item.quote_id = quote.id;
         db.quote_items.push(item);
@@ -501,6 +518,24 @@ export async function invoke(commandName, args = {}) {
       }
       return true;
 
+    // ── Backup e diagnostica ────────────────────────────────────────
+    // Nell'anteprima web non esiste un filesystem su cui operare: restituiamo
+    // valori plausibili senza fingere che l'operazione sia riuscita davvero.
+    case 'get_backup_info':
+      return {
+        directory: "(non disponibile nell'anteprima web)",
+        count: 0,
+        keep: 7,
+        latest: null
+      };
+    case 'create_backup_now':
+      throw new Error("Backup non disponibile nell'anteprima web");
+    case 'send_log_to_telegram':
+    case 'send_database_to_telegram':
+      throw new Error("Invio diagnostica non disponibile nell'anteprima web");
+    case 'export_database':
+      throw new Error("Esportazione non disponibile nell'anteprima web");
+
     default:
       console.warn(`[MOCK TAURI] Command ${commandName} is not explicitly mocked, returning default value.`);
       return null;
@@ -537,6 +572,6 @@ export function getCurrentWindow() {
     minimize: () => console.log('Window minimize requested'),
     maximize: () => console.log('Window maximize requested'),
     close: () => console.log('Window close requested'),
-    listen: (name, cb) => console.log(`Window listening for ${name}`)
+    listen: (name) => console.log(`Window listening for ${name}`)
   };
 }

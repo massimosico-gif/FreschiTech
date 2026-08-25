@@ -11,7 +11,7 @@ const SectionHeader = ({ icon: Icon, title, subtitle, color = '#8bc53f' }) => {
       </div>
       <div className="flex flex-col">
         <h3 className="text-sm font-black uppercase tracking-wider text-slate-700">{title}</h3>
-        {subtitle && <p className="text-[0.6rem] font-black uppercase tracking-[0.2em] text-slate-400">{subtitle}</p>}
+        {subtitle && <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-slate-400">{subtitle}</p>}
       </div>
     </div>
   )

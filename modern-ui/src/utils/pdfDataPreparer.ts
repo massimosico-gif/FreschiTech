@@ -10,13 +10,24 @@
  */
 
 import { Project, CostCenter, Material, Labor, Expense } from '../types';
+import {
+  costCenterCost,
+  costCenterSale,
+  expenseCost,
+  expenseSale,
+  laborHoursCost,
+  laborHoursSale,
+  laborTravelCost,
+  laborTravelSale,
+  materialCost,
+  materialSale,
+  parseNum,
+} from './costing';
 
 // ─── Utility helpers ────────────────────────────────────────────────
-export const parseNum = (val: any): number => {
-  if (val === null || val === undefined) return 0;
-  const parsed = parseFloat(String(val).replace(',', '.'));
-  return isNaN(parsed) ? 0 : parsed;
-};
+// `parseNum` e le formule economiche vivono in `costing.ts`: e' l'unica fonte
+// di verita' condivisa con lo store e con AnalyticsTab.
+export { parseNum };
 
 export const formatEuro = (value: number): string => {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value);
@@ -83,7 +94,8 @@ const groupByCostCenter = (
       target.labor.push(l);
     }
     // Su SQLite il booleano is_travel viene deserializzato a volte come 1/0 o true/false
-    if (l.is_travel === true || (l.is_travel as any) === 1 || parseNum(l.travel_cost) > 0) {
+    const isTravelFlag = l.is_travel as boolean | number | null | undefined;
+    if (isTravelFlag === true || isTravelFlag === 1 || parseNum(l.travel_cost) > 0) {
       target.travel.push(l);
     }
   });
@@ -150,11 +162,7 @@ export const prepareClientPdfData = (
     // 1. Fornitura (costo base CC con rincaro + spedizione + fee installazione)
     if (!isGeneral && group.ccInfo) {
       const cc = group.ccInfo;
-      const baseCost = parseNum(cc.base_cost);
-      const markup = parseNum(cc.markup);
-      const shipping = parseNum(cc.shipping);
-      const installFee = parseNum(cc.install_fee);
-      const salePrice = baseCost * (1 + markup) + shipping + installFee;
+      const salePrice = costCenterSale(cc);
       subtotal += salePrice;
 
       rows.push([
@@ -170,10 +178,8 @@ export const prepareClientPdfData = (
     // 2. Materiali
     group.materials.forEach(m => {
       const qty = parseNum(m.quantity);
-      const cost = parseNum(m.unit_price);
-      const markup = parseNum(m.markup);
-      const salePrice = cost * (1 + markup);
-      const totalSale = qty * salePrice;
+      const salePrice = parseNum(m.unit_price) * (1 + parseNum(m.markup));
+      const totalSale = materialSale(m);
       subtotal += totalSale;
 
       rows.push([
@@ -189,10 +195,8 @@ export const prepareClientPdfData = (
     // 3. Manodopera
     group.labor.forEach(l => {
       const hours = parseNum(l.hours);
-      const cost = parseNum(l.hourly_cost);
-      const markup = parseNum(l.markup);
-      const saleRate = cost * (1 + markup);
-      const totalSale = hours * saleRate;
+      const saleRate = parseNum(l.hourly_cost) * (1 + parseNum(l.markup));
+      const totalSale = laborHoursSale(l);
       subtotal += totalSale;
 
       rows.push([
@@ -207,9 +211,7 @@ export const prepareClientPdfData = (
 
     // 4. Spese
     group.expenses.forEach(e => {
-      const cost = parseNum(e.amount);
-      const markup = parseNum(e.markup);
-      const salePrice = cost * (1 + markup);
+      const salePrice = expenseSale(e);
       subtotal += salePrice;
 
       rows.push([
@@ -224,9 +226,7 @@ export const prepareClientPdfData = (
 
     // 5. Trasferte
     group.travel.forEach(t => {
-      const cost = parseNum(t.travel_cost);
-      const markup = parseNum(t.markup);
-      const salePrice = cost * (1 + markup);
+      const salePrice = laborTravelSale(t);
       subtotal += salePrice;
 
       rows.push([
@@ -306,13 +306,10 @@ export const prepareInternalPdfData = (
     // 1. Fornitura CC
     if (!isGeneral && group.ccInfo) {
       const cc = group.ccInfo;
-      const baseCost = parseNum(cc.base_cost);
       const markup = parseNum(cc.markup);
-      const shipping = parseNum(cc.shipping);
-      const installFee = parseNum(cc.install_fee);
 
-      const itemCost = baseCost + shipping + installFee;
-      const itemSale = baseCost * (1 + markup) + shipping + installFee;
+      const itemCost = costCenterCost(cc);
+      const itemSale = costCenterSale(cc);
       const margin = itemSale - itemCost;
       const marginPercent = itemSale > 0 ? (margin / itemSale) : 0;
 
@@ -339,8 +336,8 @@ export const prepareInternalPdfData = (
       const markup = parseNum(m.markup);
       const sale = cost * (1 + markup);
 
-      const totalCost = qty * cost;
-      const totalSale = qty * sale;
+      const totalCost = materialCost(m);
+      const totalSale = materialSale(m);
       const margin = totalSale - totalCost;
       const marginPercent = totalSale > 0 ? (margin / totalSale) : 0;
 
@@ -367,8 +364,8 @@ export const prepareInternalPdfData = (
       const markup = parseNum(l.markup);
       const sale = cost * (1 + markup);
 
-      const totalCost = hours * cost;
-      const totalSale = hours * sale;
+      const totalCost = laborHoursCost(l);
+      const totalSale = laborHoursSale(l);
       const margin = totalSale - totalCost;
       const marginPercent = totalSale > 0 ? (margin / totalSale) : 0;
 
@@ -390,9 +387,9 @@ export const prepareInternalPdfData = (
 
     // 4. Spese
     group.expenses.forEach(e => {
-      const cost = parseNum(e.amount);
+      const cost = expenseCost(e);
       const markup = parseNum(e.markup);
-      const sale = cost * (1 + markup);
+      const sale = expenseSale(e);
       const margin = sale - cost;
       const marginPercent = sale > 0 ? (margin / sale) : 0;
 
@@ -414,9 +411,9 @@ export const prepareInternalPdfData = (
 
     // 5. Trasferte
     group.travel.forEach(t => {
-      const cost = parseNum(t.travel_cost);
+      const cost = laborTravelCost(t);
       const markup = parseNum(t.markup);
-      const sale = cost * (1 + markup);
+      const sale = laborTravelSale(t);
       const margin = sale - cost;
       const marginPercent = sale > 0 ? (margin / sale) : 0;
 

@@ -164,8 +164,8 @@ const MaintenanceSettings = () => {
         )}
 
         <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-          <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">In caso di problemi puoi ripristinare il percorso originale</span>
-          <button onClick={handleResetDbPath} disabled={saving} className="flex items-center gap-2 px-6 py-3 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all">
+          <span className="text-[0.75rem] font-bold text-slate-400 uppercase tracking-widest">In caso di problemi puoi ripristinare il percorso originale</span>
+          <button onClick={handleResetDbPath} disabled={saving} className="flex items-center gap-2 px-6 py-3 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all">
             <RefreshCw size={14} /> Ripristina Default
           </button>
         </div>
@@ -187,7 +187,7 @@ const MaintenanceSettings = () => {
               <div className="p-2 bg-[#8bc53f]/10 text-[#8bc53f] rounded-lg"><Database size={18} /></div>
               <div>
                 <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Backup Locale</h4>
-                <p className="text-[0.65rem] font-bold text-slate-400">Crea una copia di sicurezza immediata</p>
+                <p className="text-[0.75rem] font-bold text-slate-400">Crea una copia di sicurezza immediata</p>
               </div>
             </div>
             <button onClick={handleBackup} disabled={backingUp} className="w-full flex items-center justify-center gap-2 h-12 bg-[#8bc53f] text-white rounded-xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-[#7ab236] transition-all disabled:opacity-50">
@@ -200,7 +200,7 @@ const MaintenanceSettings = () => {
               <div className="p-2 bg-slate-100 text-slate-500 rounded-lg"><AlertTriangle size={18} /></div>
               <div>
                 <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Log di Sistema</h4>
-                <p className="text-[0.65rem] font-bold text-slate-400">Invia diagnostica allo sviluppatore</p>
+                <p className="text-[0.75rem] font-bold text-slate-400">Invia diagnostica allo sviluppatore</p>
               </div>
             </div>
             <button onClick={handleSendLogs} disabled={sendingLogs} className="w-full flex items-center justify-center gap-2 h-12 bg-slate-800 text-white rounded-xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-slate-900 transition-all disabled:opacity-50">

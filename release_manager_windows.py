@@ -7,7 +7,6 @@ import requests
 import glob
 import webview
 import threading
-import re
 import time
 
 # --- CONFIGURAZIONE ---
@@ -18,7 +17,19 @@ REPO_OWNER = "massimosico-gif"
 REPO_NAME = "FreschiTech-Releases"
 GIST_ID = "8305a31d9ccfad4fe99a689baf958d4b"
 RELEASE_REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
-PRIVATE_KEY = "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5b09nM3RHZHdqUnl0ZXJJRElEak1ONVBnUGxJYTdnK0dUMStrcXFiSkhhNEFBQkFBQUFBQUFBQUFBQUlBQUFBQVhtWkhLMWUvY2VyQmNtaVFEWW1rRnRNN1FMbHNRVktCcVdVYkt3dDZmYjBUTytXNmNCYTFJTWF3WEYvQ0dycEQvdTdvMS9mQW1rM3hZL0pmc3RpZGdwWWZlc0htcVdqekxnN0srVU03cndMZ1MxVWw2UU9mUlc4YlRsM1l6dTB4cGNPTjRKS0ViTkE9Cg=="
+
+# I segreti vivono in .env (gitignored), MAI in questo file: e' versionato.
+# La chiave privata firma gli aggiornamenti automatici, quindi chi la ottiene
+# puo' far installare codice arbitrario su tutte le macchine con FreschiTech.
+ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
+ENV_SIGNING_KEY = "TAURI_SIGNING_PRIVATE_KEY"
+ENV_SIGNING_PASSWORD = "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+
+# Credenziali della diagnostica Telegram, lette da Rust con option_env! durante
+# la compilazione. Il prefisso NON e' VITE_: Vite sostituirebbe le variabili
+# VITE_* nel bundle JavaScript, esponendo il token a chiunque abbia l'app.
+ENV_TELEGRAM_TOKEN = "FRESCHITECH_TELEGRAM_BOT_TOKEN"
+ENV_TELEGRAM_CHAT = "FRESCHITECH_TELEGRAM_CHAT_ID"
 
 HTML_CONTENT = """
 <!DOCTYPE html>
@@ -174,7 +185,17 @@ class Api:
             bundle_base = os.path.join(PROJECT_DIR, "src-tauri", "target", "release", "bundle")
             if os.path.exists(bundle_base): shutil.rmtree(bundle_base)
 
-            self._current_process = subprocess.Popen("cmd /c npx tauri build", shell=True, cwd=PROJECT_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            # Le credenziali Telegram vengono passate all'ambiente di build:
+            # finiscono nel binario Rust, non nel bundle JavaScript.
+            build_env = os.environ.copy()
+            for name in (ENV_TELEGRAM_TOKEN, ENV_TELEGRAM_CHAT):
+                value = self._get_secret(name)
+                if value:
+                    build_env[name] = value
+                else:
+                    self.log(f"Avviso: {name} non impostato, diagnostica Telegram disattivata.", "warning")
+
+            self._current_process = subprocess.Popen("cmd /c npx tauri build", shell=True, cwd=PROJECT_DIR, env=build_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             
             for line in self._current_process.stdout:
                 if self._is_cancelled: break
@@ -207,9 +228,25 @@ class Api:
 
             # 4. Sign
             self.log("Firma digitale in corso...", "info")
+            signing_key = self._get_secret(ENV_SIGNING_KEY)
+            if not signing_key:
+                self.log(
+                    f"ERRORE: {ENV_SIGNING_KEY} non trovato in .env. "
+                    "Genera la coppia di chiavi con 'npx tauri signer generate' "
+                    "e inserisci la chiave privata nel file .env.",
+                    "error",
+                )
+                self._window.evaluate_js("finish(false)")
+                return
+
+            signing_password = self._get_secret(ENV_SIGNING_PASSWORD) or ""
             env = os.environ.copy()
-            env["TAURI_SIGNING_PRIVATE_KEY"] = PRIVATE_KEY
-            sign_cmd = f'cmd /c npx tauri signer sign --password "" "{installer_path}"'
+            env[ENV_SIGNING_KEY] = signing_key
+            env[ENV_SIGNING_PASSWORD] = signing_password
+
+            # La password viaggia nell'ambiente, non sulla riga di comando:
+            # gli argomenti di un processo sono leggibili da altri utenti.
+            sign_cmd = f'cmd /c npx tauri signer sign "{installer_path}"'
             subprocess.run(sign_cmd, shell=True, cwd=PROJECT_DIR, env=env)
             
             sig_file = installer_path + ".sig"
@@ -282,14 +319,29 @@ class Api:
             self.log(f"ERRORE SISTEMA: {str(e)}", "error")
             self._window.evaluate_js("finish(false)")
 
+    def _get_secret(self, name):
+        """Legge un segreto dai file .env, con fallback sulle variabili d'ambiente.
+
+        Cerca sia nella cartella principale sia in modern-ui: storicamente i
+        segreti del frontend stavano nel secondo file, quelli di release nel
+        primo. Vince la prima occorrenza trovata.
+        """
+        for directory in (BASE_DIR, PROJECT_DIR):
+            env_path = os.path.join(directory, ".env")
+            if not os.path.exists(env_path):
+                continue
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    key, _, value = line.partition("=")
+                    if key.strip() == name:
+                        return value.strip().strip('"').strip("'")
+        return os.environ.get(name)
+
     def _get_token(self):
-        env_path = os.path.join(BASE_DIR, ".env")
-        if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                content = f.read()
-                m = re.search(r'GITHUB_TOKEN=(.*)', content)
-                if m: return m.group(1).strip()
-        return None
+        return self._get_secret(ENV_GITHUB_TOKEN)
 
     def _update_files(self, version):
         with open(os.path.join(BASE_DIR, 'VERSION'), 'w') as f: f.write(version)

@@ -74,7 +74,7 @@ const ClientSelector = ({ clients, value, onChange, error, onAddNew }) => {
               ))
             ) : (
               <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
-                <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessun cliente trovato</p>
+                <p className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Nessun cliente trovato</p>
                 {onAddNew && (
                   <button
                     type="button"
@@ -82,7 +82,7 @@ const ClientSelector = ({ clients, value, onChange, error, onAddNew }) => {
                       onAddNew(search)
                       setIsOpen(false)
                     }}
-                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.6rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.72rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
                   >
                     {search ? `+ Aggiungi "${search}"` : '+ Aggiungi Nuovo Cliente'}
                   </button>

@@ -55,7 +55,7 @@ const VehicleSelector = ({ vehicles, value, onChange, onAddNew, placeholder = "S
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className={`w-full bg-slate-50 border-none text-slate-700 font-bold focus:ring-0 ${
-                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.65rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
+                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.75rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
               }`}
             />
           </div>
@@ -83,7 +83,7 @@ const VehicleSelector = ({ vehicles, value, onChange, onAddNew, placeholder = "S
               ))
             ) : (
               <div className={`p-4 text-center text-slate-400 flex flex-col items-center ${compact ? 'gap-2' : 'gap-3'}`}>
-                <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessun mezzo trovato</p>
+                <p className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Nessun mezzo trovato</p>
                 {onAddNew && (
                   <button
                     type="button"
@@ -92,7 +92,7 @@ const VehicleSelector = ({ vehicles, value, onChange, onAddNew, placeholder = "S
                       setIsOpen(false)
                     }}
                     className={`bg-accent text-white rounded-xl font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer ${
-                      compact ? 'px-3 py-1.5 text-[0.55rem]' : 'px-4 py-2.5 text-[0.6rem]'
+                      compact ? 'px-3 py-1.5 text-[0.7rem]' : 'px-4 py-2.5 text-[0.72rem]'
                     }`}
                   >
                     {search ? `+ "${search}"` : '+ Aggiungi Nuovo'}

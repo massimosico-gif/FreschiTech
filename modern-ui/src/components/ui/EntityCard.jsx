@@ -15,11 +15,28 @@ const EntityCard = ({
   onDelete,
   onEdit
 }) => {
+  // La card e' cliccabile, quindi dev'essere anche raggiungibile da tastiera.
+  // Non e' un `<button>` perche' contiene gia' i pulsanti Modifica ed Elimina,
+  // e un pulsante dentro un pulsante non e' HTML valido: `role` piu'
+  // `tabIndex` piu' Invio/Spazio danno lo stesso comportamento.
+  const handleKeyDown = (e) => {
+    if (!onClick) return
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  }
+
   return (
-    <div className="h-full relative group" onClick={() => {
-      console.log("EntityCard: CLICK SUL WRAPPER ESTERNO di", title);
-      if (onClick) onClick();
-    }}>
+    <div
+      className="h-full relative group rounded-[2rem] focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/25"
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `Apri ${title}` : undefined}
+      onKeyDown={handleKeyDown}
+      onClick={() => { if (onClick) onClick() }}
+    >
       <Card 
         hoverEffect={true} 
         className="cursor-pointer transition-all duration-500 hover:bg-accent hover:shadow-2xl hover:shadow-accent/40 group overflow-hidden"
@@ -32,17 +49,13 @@ const EntityCard = ({
             </div>
             <div className="flex items-center gap-1">
               {badge && (
-                <div className={`px-4 py-1.5 rounded-full text-[0.6rem] font-black uppercase tracking-widest transition-all duration-500 ${badgeColor} group-hover:bg-white/20 group-hover:text-white`}>
+                <div className={`px-4 py-1.5 rounded-full text-[0.72rem] font-black uppercase tracking-widest transition-all duration-500 ${badgeColor} group-hover:bg-white/20 group-hover:text-white`}>
                   {badge}
                 </div>
               )}
               {onEdit && (
                 <button 
-                  onClick={(e) => { 
-                    console.log("EntityCard: CLICK MATITA");
-                    e.stopPropagation(); 
-                    onEdit(); 
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onEdit() }}
                   className="p-2 text-slate-300 group-hover:text-white/70 hover:group-hover:text-white transition-colors"
                   title="Modifica"
                 >
@@ -51,11 +64,7 @@ const EntityCard = ({
               )}
               {onDelete && (
                 <button 
-                  onClick={(e) => { 
-                    console.log("EntityCard: CLICK CESTINO");
-                    e.stopPropagation(); 
-                    onDelete(); 
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDelete() }}
                   className="p-2 text-slate-300 group-hover:text-white/70 hover:group-hover:text-white transition-colors"
                   title="Elimina"
                 >
@@ -71,7 +80,7 @@ const EntityCard = ({
               <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight group-hover:text-white transition-colors duration-500">
                 {title}
               </h3>
-              <div className="flex items-center gap-2 mt-2 text-slate-400 group-hover:text-white/60 transition-colors duration-500">
+              <div className="flex items-center gap-2 mt-2 text-slate-500 group-hover:text-white/70 transition-colors duration-500">
                 {SubtitleIcon && <SubtitleIcon size={14} />}
                 <span className="text-[0.7rem] font-bold uppercase tracking-wider">
                   {subtitle || 'N/D'}
@@ -84,7 +93,7 @@ const EntityCard = ({
               <div className="grid grid-cols-3 gap-4 pt-4 pb-2 border-t border-slate-50 group-hover:border-white/10 transition-colors duration-500">
                 {stats.map((stat, idx) => (
                   <div key={idx} className="space-y-1">
-                    <p className="text-[0.55rem] font-black uppercase tracking-[0.05em] text-slate-400 group-hover:text-white/60 transition-colors duration-500">
+                    <p className="text-[0.7rem] font-black uppercase tracking-[0.05em] text-slate-500 group-hover:text-white/70 transition-colors duration-500">
                       {stat.label}
                     </p>
                     <p className={`text-xs font-extrabold transition-colors duration-500 ${
@@ -106,9 +115,9 @@ const EntityCard = ({
           <div className="pt-6 border-t border-slate-100 group-hover:border-white/10 flex items-center justify-between transition-colors duration-500">
             <div className="flex items-center gap-4">
               {footerItems.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 text-slate-400 group-hover:text-white/60 transition-colors duration-500">
+                <div key={idx} className="flex items-center gap-1.5 text-slate-500 group-hover:text-white/70 transition-colors duration-500">
                   {item.icon}
-                  <span className="text-[0.65rem] font-bold">{item.label}</span>
+                  <span className="text-[0.75rem] font-bold">{item.label}</span>
                 </div>
               ))}
             </div>

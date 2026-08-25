@@ -284,7 +284,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
             </div>
             
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Cliente *</label>
               <ClientSelector 
                 clients={clients} 
                 value={formData.client_id} 
@@ -292,11 +292,11 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
                 error={errors.client_id}
                 onAddNew={handleAddNewClientClick}
               />
-              {errors.client_id && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.client_id}</p>}
+              {errors.client_id && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.client_id}</p>}
             </div>
   
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Nome Commessa / Cantiere *</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Nome Commessa / Cantiere *</label>
               <div className="relative">
                  <Briefcase className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
                  <input 
@@ -307,11 +307,11 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
                   placeholder="Es: Installazione Robot Mungitura Stalla Rossi" 
                 />
               </div>
-              {errors.name && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
+              {errors.name && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
             </div>
 
             <div className="space-y-2 relative">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Commessa / Cantiere</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Commessa / Cantiere</label>
               <div className="relative">
                  <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                  <input 
@@ -346,7 +346,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
               <div className="relative">
                  <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                  <input 
@@ -371,14 +371,14 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inizio</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inizio</label>
                 <DatePicker 
                   value={formData.start_date} 
                   onChange={handleDateChange} 
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato</label>
+                <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Stato</label>
                 <Select 
                   options={statusOptions}
                   value={formData.status}
@@ -398,7 +398,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
             </div>
             
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Libere</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Libere</label>
               <div className="relative">
                 <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
                 <textarea 

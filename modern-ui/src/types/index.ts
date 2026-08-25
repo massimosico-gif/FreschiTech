@@ -109,3 +109,25 @@ export interface CatalogMaterial {
   markup?: number | null;
 }
 
+
+/**
+ * Impostazioni globali, memorizzate come coppie chiave/valore in
+ * `global_settings` e restituite dal backend come un unico oggetto JSON.
+ *
+ * Le chiavi note sono elencate qui; l'index signature copre quelle
+ * aggiunte dai singoli pannelli senza obbligare a modificare questo tipo.
+ */
+export interface GlobalSettings {
+  phases_material?: string[];
+  phases_labor?: string[];
+  categories_cost_center?: string[];
+  vehicles?: Array<string | { name: string; km_cost?: number }>;
+  default_hourly_cost?: string | number;
+  default_markup?: string | number;
+  default_install_fee_percent?: string | number;
+  company_name?: string;
+  company_address?: string;
+  telegram_bot_token?: string;
+  telegram_chat_id?: string;
+  [key: string]: unknown;
+}

@@ -42,7 +42,7 @@ const SearchSelect = ({
           onClick={() => setIsOpen(!isOpen)}
           className={`fh-input ${Icon ? 'fh-input-iconic' : ''} flex items-center justify-between text-left`}
         >
-          <span className={!selectedOption ? 'text-slate-400' : 'text-slate-700 font-bold uppercase text-[0.65rem]'}>
+          <span className={!selectedOption ? 'text-slate-400' : 'text-slate-700 font-bold uppercase text-[0.75rem]'}>
             {selectedOption ? selectedOption[displayKey] : placeholder}
           </span>
           <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-[#8bc53f]' : 'text-slate-400'}`} />
@@ -58,7 +58,7 @@ const SearchSelect = ({
                   onChange(option[valueKey])
                   setIsOpen(false)
                 }}
-                className="w-full px-6 py-4 text-left text-[0.65rem] font-black uppercase tracking-widest hover:bg-[#8bc53f]/10 transition-colors flex items-center justify-between group"
+                className="w-full px-6 py-4 text-left text-[0.75rem] font-black uppercase tracking-widest hover:bg-[#8bc53f]/10 transition-colors flex items-center justify-between group"
               >
                 <span className={value === option[valueKey] ? 'text-[#8bc53f]' : 'text-slate-500 group-hover:text-[#8bc53f]'}>
                   {renderOption ? renderOption(option) : option[displayKey]}

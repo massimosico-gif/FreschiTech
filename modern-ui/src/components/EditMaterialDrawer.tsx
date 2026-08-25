@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { 
   Package, 
   Save, 
@@ -15,6 +14,8 @@ import Select from './ui/Select'
 import DatePicker from './ui/DatePicker'
 import PhaseSelector from './ui/PhaseSelector'
 import { Material, CostCenter, CatalogMaterial } from '../types'
+import usePhaseOptions from '../hooks/usePhaseOptions'
+import useAutocomplete, { type Suggestion } from '../hooks/useAutocomplete'
 
 interface EditMaterialDrawerProps {
   isOpen: boolean;
@@ -52,47 +53,25 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
   
   const [initialData, setInitialData] = useState<string>('')
 
-  // Autocomplete suggestions state
-  const [suggestions, setSuggestions] = useState<any[]>([])
-  const [activeField, setActiveField] = useState<string | null>(null)
-  const [highlightedIndex, setHighlightedIndex] = useState<number>(0)
+  // Autocomplete: l'elenco e' eterogeneo (articoli di listino oppure nomi di
+  // fornitore) e viene discriminato da `activeField`. L'hook condiviso ne
+  // modella l'unione e aggiunge debounce e scarto delle risposte tardive.
+  const {
+    suggestions,
+    activeField,
+    highlightedIndex,
+    setHighlightedIndex,
+    requestSuggestions,
+    clear: clearSuggestions,
+    handleKeyDown: handleAutocompleteKeyDown,
+  } = useAutocomplete()
 
-  const [phaseOptions, setPhaseOptions] = useState<Array<{ id: string; label: string }>>([
-    { id: 'Generale', label: 'Generale' }
-  ])
-
-  useEffect(() => {
-    invoke<any>('get_global_settings').then(res => {
-      if (res.phases_material && res.phases_material.length > 0) {
-        setPhaseOptions(res.phases_material.map((p: string) => ({ id: p, label: p })))
-      }
-    }).catch(console.error)
-  }, [])
+  // Fasi e creazione di nuove fasi: logica condivisa con MaterialsTab.
+  const { inputOptions: phaseOptions, addPhase } = usePhaseOptions('phases_material')
 
   const handleAddNewPhase = async (newPhaseName: string) => {
-    const trimmed = newPhaseName.trim()
-    if (!trimmed) return
-
-    try {
-      const currentSettings = await invoke<any>('get_global_settings')
-      const phases = currentSettings.phases_material || []
-
-      if (!phases.includes(trimmed)) {
-        const updatedPhases = [...phases, trimmed]
-        const newSettings = {
-          ...currentSettings,
-          phases_material: updatedPhases
-        }
-
-        await invoke('save_global_settings', { settings: newSettings })
-        setPhaseOptions(updatedPhases.map((p: string) => ({ id: p, label: p })))
-      }
-
-      setFormData(prev => ({ ...prev, phase: trimmed }))
-    } catch (err) {
-      console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
-    }
+    const created = await addPhase(newPhaseName)
+    if (created) setFormData(prev => ({ ...prev, phase: created }))
   }
 
   const ccOptions = useMemo(() => [
@@ -106,8 +85,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
   useEffect(() => {
     if (isOpen) {
       setErrors({})
-      setSuggestions([])
-      setActiveField(null)
+      clearSuggestions()
       setHighlightedIndex(0)
       let data: Partial<Material>;
       if (material) {
@@ -149,7 +127,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
     return !!(isPhaseMissing || isCodeMissing || isDescriptionMissing || isNotDirtyEdit)
   }, [formData.phase, formData.code, formData.description, material, isDirty])
 
-  const validateField = (name: string, value: any) => {
+  const validateField = (name: string, value: string | number | null | undefined) => {
     let error = ''
     if (name === 'description' && !value) {
       error = 'La descrizione è obbligatoria'
@@ -157,7 +135,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
     if (name === 'code' && !value) {
       error = 'Il codice è obbligatorio'
     }
-    if (name === 'quantity' && value <= 0) {
+    if (name === 'quantity' && Number(value) <= 0) {
       error = 'La quantità deve essere maggiore di 0'
     }
     setErrors(prev => ({ ...prev, [name]: error }))
@@ -170,39 +148,9 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
     validateField(name, value)
 
     if (name === 'code' || name === 'description') {
-      if (value.trim().length >= 2) {
-        invoke<CatalogMaterial[]>('search_catalog_materials', { query: value })
-          .then((results) => {
-            setSuggestions(results)
-            setActiveField(name)
-            setHighlightedIndex(0)
-          })
-          .catch((err) => {
-            console.error('Errore ricerca catalogo:', err)
-            setSuggestions([])
-            setActiveField(null)
-          })
-      } else {
-        setSuggestions([])
-        setActiveField(null)
-      }
+      requestSuggestions(name, value, 'catalog')
     } else if (name === 'supplier') {
-      if (value.trim().length >= 1) {
-        invoke<string[]>('search_suppliers', { query: value })
-          .then((results) => {
-            setSuggestions(results)
-            setActiveField(name)
-            setHighlightedIndex(0)
-          })
-          .catch((err) => {
-            console.error('Errore ricerca fornitori:', err)
-            setSuggestions([])
-            setActiveField(null)
-          })
-      } else {
-        setSuggestions([])
-        setActiveField(null)
-      }
+      requestSuggestions(name, value, 'supplier')
     }
   }
 
@@ -221,8 +169,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
       code: '',
       description: ''
     }))
-    setSuggestions([])
-    setActiveField(null)
+    clearSuggestions()
   }
 
   const handleSelectSupplierSuggestion = (supplierName: string) => {
@@ -230,40 +177,27 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
       ...prev,
       supplier: supplierName
     }))
-    setSuggestions([])
-    setActiveField(null)
+    clearSuggestions()
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (activeField && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev + 1) % suggestions.length)
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length)
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        if (suggestions[highlightedIndex]) {
-          if (activeField === 'supplier') {
-            handleSelectSupplierSuggestion(suggestions[highlightedIndex])
-          } else {
-            handleSelectSuggestion(suggestions[highlightedIndex])
-          }
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        setSuggestions([])
-        setActiveField(null)
-      }
+  /** Instrada la selezione in base al campo attivo. */
+  const selectSuggestion = (item: Suggestion) => {
+    if (typeof item === 'string') {
+      handleSelectSupplierSuggestion(item)
+    } else {
+      handleSelectSuggestion(item)
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!activeField) return
+    handleAutocompleteKeyDown(e, activeField, selectSuggestion)
+  }
+
   const handleBlur = () => {
-    setTimeout(() => {
-      setSuggestions([])
-      setActiveField(null)
-    }, 200)
+    // Ritardo necessario perche' il click su un suggerimento arrivi prima
+    // della chiusura della tendina.
+    setTimeout(clearSuggestions, 200)
   }
 
   const renderSuggestions = (fieldName: string) => {
@@ -271,7 +205,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
     if (fieldName === 'supplier') {
       return (
         <div className="absolute left-0 right-0 top-full mt-2 bg-white/95 backdrop-blur-md border border-slate-100/50 rounded-2xl shadow-2xl max-h-60 overflow-y-auto z-50 p-2 space-y-1">
-          {suggestions.map((name, index) => (
+          {(suggestions as string[]).map((name, index) => (
             <div
               key={index}
               onMouseDown={(e) => {
@@ -295,7 +229,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
     }
     return (
       <div className="absolute left-0 right-0 top-full mt-2 bg-white/95 backdrop-blur-md border border-slate-100/50 rounded-2xl shadow-2xl max-h-60 overflow-y-auto z-50 p-2 space-y-1">
-        {suggestions.map((item: CatalogMaterial, index) => (
+        {(suggestions as CatalogMaterial[]).map((item, index) => (
           <div
             key={item.id || index}
             onMouseDown={(e) => {
@@ -311,7 +245,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
           >
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[0.65rem] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded">
+                <span className="text-[0.75rem] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded">
                   {item.code || 'N/A'}
                 </span>
                 <span className="text-xs font-bold truncate max-w-[200px]">
@@ -319,7 +253,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
                 </span>
               </div>
               {item.supplier && (
-                <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-widest mt-1">
                   {item.supplier}
                 </span>
               )}
@@ -328,7 +262,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
               <span className="text-xs font-black text-slate-800">
                 € {item.unit_price !== null && item.unit_price !== undefined ? item.unit_price.toFixed(2) : '0.00'}
               </span>
-              <span className="text-[0.6rem] font-bold text-slate-400">
+              <span className="text-[0.72rem] font-bold text-slate-400">
                 /{item.unit || 'pz'}
               </span>
             </div>
@@ -393,11 +327,11 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
 
           {!defaultCostCenterId && (
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Centro di Costo</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Centro di Costo</label>
               <Select 
                 options={ccOptions}
                 value={formData.cost_center_id}
-                onChange={(val: any) => setFormData(p => ({...p, cost_center_id: val}))}
+                onChange={(val: number | null) => setFormData(p => ({...p, cost_center_id: val}))}
                 icon={Target}
               />
             </div>
@@ -405,7 +339,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
 
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fase / Ambito</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fase / Ambito</label>
               <PhaseSelector 
                 phases={phaseOptions}
                 value={formData.phase || 'Generale'}
@@ -414,7 +348,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inserimento</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Data Inserimento</label>
               <DatePicker 
                 value={formData.date || ''} 
                 onChange={(val: string) => setFormData(p => ({...p, date: val}))} 
@@ -431,7 +365,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
 
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-1 space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice *</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice *</label>
               <div className="relative">
                 <Hash className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.code ? 'text-rose-500' : 'text-slate-400'}`} size={16} />
                 <input 
@@ -447,10 +381,10 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
                 />
                 {renderSuggestions('code')}
               </div>
-              {errors.code && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.code}</p>}
+              {errors.code && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.code}</p>}
             </div>
             <div className="col-span-2 space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione *</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Descrizione *</label>
               <div className="relative">
                 <input 
                   name="description" 
@@ -465,12 +399,12 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
                 />
                 {renderSuggestions('description')}
               </div>
-              {errors.description && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.description}</p>}
+              {errors.description && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.description}</p>}
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fornitore</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fornitore</label>
             <div className="relative">
               <Truck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -497,41 +431,41 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
 
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Quantità</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Quantità</label>
               <div className="relative">
                 <Box className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input type="number" name="quantity" value={formData.quantity || 1} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className={`w-full bg-white/50 border rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 transition-all shadow-sm ${errors.quantity ? 'border-rose-300 focus:ring-rose-100' : 'border-white/50 focus:ring-accent/20 focus:bg-white'}`} step="0.01" />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Unità di Misura</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Unità di Misura</label>
               <input name="unit" value={formData.unit || 'pz'} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" placeholder="Es: pz, m, kg" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Prezzo Unitario (€)</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Prezzo Unitario (€)</label>
               <div className="relative">
                 <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input type="number" name="unit_price" value={formData.unit_price || 0} onChange={handleChange} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 pl-12 pr-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" step="0.01" />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ricarico (%)</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ricarico (%)</label>
               <input type="number" name="markup" value={((formData.markup || 0) * 100)} onChange={(e) => setFormData(p => ({...p, markup: parseFloat(e.target.value)/100}))} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-full bg-white/50 border border-white/50 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:bg-white transition-all shadow-sm" />
             </div>
           </div>
           
           <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 flex justify-between items-center">
             <div>
-              <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 mb-1">Totale Vendita Previsto</p>
+              <p className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 mb-1">Totale Vendita Previsto</p>
               <p className="text-xl font-black text-slate-800">
                 € {(((formData.quantity || 0) * (formData.unit_price || 0)) * (1 + (formData.markup || 0))).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 mb-1">Margine</p>
+              <p className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 mb-1">Margine</p>
               <p className="text-sm font-bold text-emerald-500">
                 +€ {(((formData.quantity || 0) * (formData.unit_price || 0)) * (formData.markup || 0)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </p>

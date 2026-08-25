@@ -304,7 +304,7 @@ const DatePicker = ({ value, onChange, label, compact = false }) => {
               <ChevronLeft size={18} />
             </button>
             <div className="text-center">
-              <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">{currentDate.getFullYear()}</p>
+              <p className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400">{currentDate.getFullYear()}</p>
               <p className="text-xs font-black text-slate-800">{months[currentDate.getMonth()]}</p>
             </div>
             <button onClick={handleNextMonth} type="button" className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-accent transition-all">
@@ -314,7 +314,7 @@ const DatePicker = ({ value, onChange, label, compact = false }) => {
 
           <div className="grid grid-cols-7 gap-1 mb-2">
             {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map(day => (
-              <div key={day} className="h-10 w-10 flex items-center justify-center text-[0.55rem] font-black text-slate-300">
+              <div key={day} className="h-10 w-10 flex items-center justify-center text-[0.7rem] font-black text-slate-300">
                 {day}
               </div>
             ))}

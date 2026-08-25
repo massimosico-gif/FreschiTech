@@ -23,6 +23,10 @@ import Select from '../ui/Select'
 import PhaseSelector from '../ui/PhaseSelector'
 import DatePicker from '../ui/DatePicker'
 import ConfirmModal from '../ui/ConfirmModal'
+import Kbd from '../ui/Kbd'
+import useAutocomplete from '../../hooks/useAutocomplete'
+import usePendingBulkAction from '../../hooks/usePendingBulkAction'
+import usePhaseOptions from '../../hooks/usePhaseOptions'
 
 const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, defaultCostCenterId = null, projectId, onSave, onRefresh }) => {
   // Filters
@@ -33,20 +37,11 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
   }
   const [filters, setFilters] = useState(initialFilters)
 
-  const [phaseOptions, setPhaseOptions] = useState([
-    { id: 'all', label: 'Tutte le Fasi' }
-  ])
-
-  useEffect(() => {
-    invoke('get_global_settings').then(res => {
-      if (res.phases_material && res.phases_material.length > 0) {
-        setPhaseOptions([
-          { id: 'all', label: 'Tutte le Fasi' },
-          ...res.phases_material.map(p => ({ id: p, label: p }))
-        ])
-      }
-    }).catch(console.error)
-  }, [])
+  const {
+    filterOptions: phaseOptions,
+    inputOptions: inlinePhaseOptions,
+    addPhase,
+  } = usePhaseOptions('phases_material')
 
   const ccOptions = useMemo(() => [
     { id: 'all', label: 'Tutti i Centri' },
@@ -84,6 +79,10 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
     const val = localStorage.getItem('materials_box_open')
     return val !== 'false'
   })
+
+  // Primo campo del box: dopo ogni salvataggio il fuoco torna qui, cosi'
+  // venti articoli di fila sono venti sequenze di digitazione senza mouse.
+  const boxFirstFieldRef = useRef(null)
 
   useEffect(() => {
     localStorage.setItem('materials_box_open', isBoxOpen)
@@ -135,280 +134,74 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
     }
   }
 
-  const [pendingMove, setPendingMove] = useState(null)
-  const [countdown, setCountdown] = useState(5)
-  const timerRef = useRef(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+  // ── Azioni massive differite ────────────────────────────────────────
+  // Countdown annullabile: la logica di timer, cleanup ed esecuzione vive
+  // nell'hook, condiviso con LaborTab.
+  const runBulkAction = async ({ type, ids, payload }) => {
+    setSelectedIds([])
+    try {
+      if (type === 'move') {
+        await invoke('move_materials_cost_center', {
+          materialIds: ids,
+          costCenterId: payload.costCenterId,
+        })
+      } else {
+        await invoke('update_materials_phase', {
+          materialIds: ids,
+          phase: payload.phase,
+        })
+      }
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      const azione = type === 'move' ? 'nello spostamento' : "nell'aggiornamento dell'ambito"
+      alert(`Errore ${azione} dei materiali: ` + err)
     }
-  }, [])
+  }
+
+  const {
+    pending: pendingMove,
+    countdown,
+    schedule: schedulePendingAction,
+    cancel: cancelPendingMove,
+    runNow: runPendingNow,
+  } = usePendingBulkAction(runBulkAction)
 
   const startPendingMove = (targetCCId) => {
     if (!targetCCId) return
     const cc = costCenters.find(c => c.id.toString() === targetCCId)
     const targetCCName = cc ? `${cc.brand ? cc.brand + ' ' : ''}${cc.model}` : 'Generale'
-    
-    const idsToMove = [...selectedIds]
-    
-    setPendingMove({
-      type: 'move',
-      materialIds: idsToMove,
-      targetCCId,
-      targetCCName
+
+    schedulePendingAction('move', selectedIds, {
+      costCenterId: targetCCId === 'general' ? null : Number(targetCCId),
+      targetCCName,
     })
-    setCountdown(5)
-    
-    if (timerRef.current) clearInterval(timerRef.current)
-    
-    let counter = 5
-    timerRef.current = setInterval(() => {
-      counter -= 1
-      if (counter <= 0) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-        executePendingMove(targetCCId, idsToMove)
-      } else {
-        setCountdown(counter)
-      }
-    }, 1000)
   }
 
   const startPendingPhaseUpdate = (targetPhase) => {
     if (!targetPhase) return
-    const idsToUpdate = [...selectedIds]
-    
-    setPendingMove({
-      type: 'phase',
-      materialIds: idsToUpdate,
-      targetPhase
+    schedulePendingAction('phase', selectedIds, {
+      // "Generale" non e' una fase reale: a database corrisponde a NULL.
+      phase: targetPhase === 'Generale' ? null : targetPhase,
+      targetPhase,
     })
-    setCountdown(5)
-    
-    if (timerRef.current) clearInterval(timerRef.current)
-    
-    let counter = 5
-    timerRef.current = setInterval(() => {
-      counter -= 1
-      if (counter <= 0) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-        executePendingPhaseUpdate(targetPhase, idsToUpdate)
-      } else {
-        setCountdown(counter)
-      }
-    }, 1000)
   }
 
-  const cancelPendingMove = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    setPendingMove(null)
-  }
+  // ── Autocomplete ────────────────────────────────────────────────────
+  // Sei gestori quasi identici sostituiti dall'hook condiviso, che aggiunge
+  // debounce e scarta le risposte fuori ordine.
+  const {
+    suggestions,
+    activeField,
+    highlightedIndex,
+    setHighlightedIndex,
+    requestSuggestions,
+    clear: clearSuggestions,
+    handleKeyDown: handleAutocompleteKeyDown,
+  } = useAutocomplete()
 
-  const executePendingMove = async (targetCCId, idsToMove) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    
-    const costCenterId = targetCCId === 'general' ? null : Number(targetCCId)
-    const materialsToMove = idsToMove || (pendingMove ? pendingMove.materialIds : [])
-    
-    setSelectedIds([])
-    setPendingMove(null)
-    
-    try {
-      await invoke('move_materials_cost_center', { 
-        materialIds: materialsToMove, 
-        costCenterId 
-      })
-      if (onRefresh) {
-        onRefresh()
-      }
-    } catch (err) {
-      alert("Errore nello spostamento dei materiali: " + err)
-    }
-  }
-
-  const executePendingPhaseUpdate = async (targetPhase, idsToUpdate) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    
-    const materialsToUpdate = idsToUpdate || (pendingMove ? pendingMove.materialIds : [])
-    
-    setSelectedIds([])
-    setPendingMove(null)
-    
-    try {
-      await invoke('update_materials_phase', { 
-        materialIds: materialsToUpdate, 
-        phase: targetPhase === 'Generale' ? null : targetPhase
-      })
-      if (onRefresh) {
-        onRefresh()
-      }
-    } catch (err) {
-      alert("Errore nell'aggiornamento dell'ambito dei materiali: " + err)
-    }
-  }
-
-  // Autocomplete suggestions states
-  const [suggestions, setSuggestions] = useState([])
-  const [activeField, setActiveField] = useState(null) // 'box_code' or 'inline_code'
-  const [highlightedIndex, setHighlightedIndex] = useState(0)
-
-  const handleBoxCodeChange = (e) => {
-    const val = e.target.value
-    setNewMaterialData(prev => ({ ...prev, code: val }))
-    if (newMaterialErrors.code) {
-      setNewMaterialErrors(prev => ({ ...prev, code: false }))
-    }
-
-    if (val.trim().length >= 2) {
-      invoke('search_catalog_materials', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('box_code')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca catalogo:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleBoxSupplierChange = (e) => {
-    const val = e.target.value
-    setNewMaterialData(prev => ({ ...prev, supplier: val }))
-
-    if (val.trim().length >= 1) {
-      invoke('search_suppliers', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('box_supplier')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca fornitori:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleBoxDescriptionChange = (e) => {
-    const val = e.target.value
-    setNewMaterialData(prev => ({ ...prev, description: val }))
-    if (newMaterialErrors.description) {
-      setNewMaterialErrors(prev => ({ ...prev, description: false }))
-    }
-
-    if (val.trim().length >= 2) {
-      invoke('search_catalog_materials', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('box_description')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca catalogo:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleInlineCodeChange = (e) => {
-    const val = e.target.value
-    setInlineFormData(prev => ({ ...prev, code: val }))
-    if (errors.code) {
-      setErrors(prev => ({ ...prev, code: false }))
-    }
-
-    if (val.trim().length >= 2) {
-      invoke('search_catalog_materials', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('inline_code')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca catalogo:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleInlineSupplierChange = (e) => {
-    const val = e.target.value
-    setInlineFormData(prev => ({ ...prev, supplier: val }))
-
-    if (val.trim().length >= 1) {
-      invoke('search_suppliers', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('inline_supplier')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca fornitori:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleInlineDescriptionChange = (e) => {
-    const val = e.target.value
-    setInlineFormData(prev => ({ ...prev, description: val }))
-    if (errors.description) {
-      setErrors(prev => ({ ...prev, description: false }))
-    }
-
-    if (val.trim().length >= 2) {
-      invoke('search_catalog_materials', { query: val })
-        .then((results) => {
-          setSuggestions(results)
-          setActiveField('inline_description')
-          setHighlightedIndex(0)
-        })
-        .catch((err) => {
-          console.error('Errore ricerca catalogo:', err)
-          setSuggestions([])
-          setActiveField(null)
-        })
-    } else {
-      setSuggestions([])
-      setActiveField(null)
-    }
-  }
-
-  const handleSelectSuggestionForBox = (item) => {
-    setNewMaterialData(prev => ({
+  /** Applica un articolo di listino ai campi del form indicato. */
+  const applyCatalogItem = (setForm, clearErrors) => (item) => {
+    setForm(prev => ({
       ...prev,
       code: item.code || prev.code,
       description: item.description || prev.description,
@@ -417,85 +210,69 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       supplier: item.supplier || prev.supplier,
       markup: item.markup !== null && item.markup !== undefined && item.markup > 0 ? item.markup : 0.25,
     }))
-    setNewMaterialErrors(prev => ({
-      ...prev,
-      code: false,
-      description: false
-    }))
-    setSuggestions([])
-    setActiveField(null)
+    clearErrors(prev => ({ ...prev, code: false, description: false }))
+    clearSuggestions()
   }
 
-  const handleSelectSupplierForBox = (supplierName) => {
-    setNewMaterialData(prev => ({
-      ...prev,
-      supplier: supplierName
-    }))
-    setSuggestions([])
-    setActiveField(null)
+  const applySupplier = (setForm) => (supplierName) => {
+    setForm(prev => ({ ...prev, supplier: supplierName }))
+    clearSuggestions()
   }
 
-  const handleSelectSuggestionForInline = (item) => {
-    setInlineFormData(prev => ({
-      ...prev,
-      code: item.code || prev.code,
-      description: item.description || prev.description,
-      unit: item.unit || prev.unit,
-      unit_price: item.unit_price !== null && item.unit_price !== undefined ? item.unit_price : prev.unit_price,
-      supplier: item.supplier || prev.supplier,
-      markup: item.markup !== null && item.markup !== undefined && item.markup > 0 ? item.markup : 0.25,
-    }))
-    setErrors(prev => ({
-      ...prev,
-      code: false,
-      description: false
-    }))
-    setSuggestions([])
-    setActiveField(null)
+  const handleSelectSuggestionForBox = applyCatalogItem(setNewMaterialData, setNewMaterialErrors)
+  const handleSelectSupplierForBox = applySupplier(setNewMaterialData)
+  const handleSelectSuggestionForInline = applyCatalogItem(setInlineFormData, setErrors)
+  const handleSelectSupplierForInline = applySupplier(setInlineFormData)
+
+  /**
+   * Genera l'onChange di un campo con suggerimenti.
+   *
+   * @param setForm     setState del form di destinazione
+   * @param clearErrors setState degli errori, per ripulire il campo toccato
+   * @param fieldName   chiave del campo nel form
+   * @param autoField   identificatore della tendina (es. 'box_code')
+   * @param kind        'catalog' oppure 'supplier'
+   */
+  const makeChangeHandler = (setForm, clearErrors, fieldName, autoField, kind) => (e) => {
+    const val = e.target.value
+    setForm(prev => ({ ...prev, [fieldName]: val }))
+    if (clearErrors) clearErrors(prev => (prev[fieldName] ? { ...prev, [fieldName]: false } : prev))
+    requestSuggestions(autoField, val, kind)
   }
 
-  const handleSelectSupplierForInline = (supplierName) => {
-    setInlineFormData(prev => ({
-      ...prev,
-      supplier: supplierName
-    }))
-    setSuggestions([])
-    setActiveField(null)
+  const handleBoxCodeChange = makeChangeHandler(setNewMaterialData, setNewMaterialErrors, 'code', 'box_code', 'catalog')
+  const handleBoxDescriptionChange = makeChangeHandler(setNewMaterialData, setNewMaterialErrors, 'description', 'box_description', 'catalog')
+  const handleBoxSupplierChange = makeChangeHandler(setNewMaterialData, null, 'supplier', 'box_supplier', 'supplier')
+  const handleInlineCodeChange = makeChangeHandler(setInlineFormData, setErrors, 'code', 'inline_code', 'catalog')
+  const handleInlineDescriptionChange = makeChangeHandler(setInlineFormData, setErrors, 'description', 'inline_description', 'catalog')
+  const handleInlineSupplierChange = makeChangeHandler(setInlineFormData, null, 'supplier', 'inline_supplier', 'supplier')
+
+  /** Instrada la selezione al form e al campo giusto. */
+  const selectSuggestionFor = (fieldName) => (item) => {
+    switch (fieldName) {
+      case 'box_code':
+      case 'box_description':
+        return handleSelectSuggestionForBox(item)
+      case 'inline_code':
+      case 'inline_description':
+        return handleSelectSuggestionForInline(item)
+      case 'box_supplier':
+        return handleSelectSupplierForBox(item)
+      case 'inline_supplier':
+        return handleSelectSupplierForInline(item)
+      default:
+        return undefined
+    }
   }
+
   const handleKeyDown = (e, targetType) => {
-    if (activeField === targetType && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev + 1) % suggestions.length)
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setHighlightedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length)
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        if (suggestions[highlightedIndex]) {
-          if (targetType === 'box_code' || targetType === 'box_description') {
-            handleSelectSuggestionForBox(suggestions[highlightedIndex])
-          } else if (targetType === 'inline_code' || targetType === 'inline_description') {
-            handleSelectSuggestionForInline(suggestions[highlightedIndex])
-          } else if (targetType === 'box_supplier') {
-            handleSelectSupplierForBox(suggestions[highlightedIndex])
-          } else if (targetType === 'inline_supplier') {
-            handleSelectSupplierForInline(suggestions[highlightedIndex])
-          }
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        setSuggestions([])
-        setActiveField(null)
-      }
-    }
+    handleAutocompleteKeyDown(e, targetType, selectSuggestionFor(targetType))
   }
 
   const handleBlur = () => {
-    setTimeout(() => {
-      setSuggestions([])
-      setActiveField(null)
-    }, 200)
+    // Ritardo necessario perche' il click su un suggerimento arrivi prima
+    // della chiusura della tendina.
+    setTimeout(clearSuggestions, 200)
   }
 
   const renderSuggestions = (fieldName) => {
@@ -553,7 +330,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
           >
             <div className="flex flex-col min-w-0 text-left">
               <div className="flex items-center gap-2">
-                <span className="text-[0.65rem] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded">
+                <span className="text-[0.75rem] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded">
                   {item.code || 'N/A'}
                 </span>
                 <span className="text-xs font-bold truncate max-w-[200px]">
@@ -561,21 +338,27 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                 </span>
               </div>
               {item.supplier && (
-                <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-widest mt-1">
                   {item.supplier}
                 </span>
               )}
             </div>
             <div className="text-right flex flex-col justify-center">
-              <span className="text-xs font-black text-slate-800">
+              <span className="text-xs font-black text-slate-800 tabular-nums">
                 € {item.unit_price !== null && item.unit_price !== undefined ? item.unit_price.toFixed(2) : '0.00'}
               </span>
-              <span className="text-[0.6rem] font-bold text-slate-400">
+              <span className="text-[0.7rem] font-semibold text-slate-500">
                 /{item.unit || 'pz'}
               </span>
             </div>
           </div>
         ))}
+        <div className="flex items-center gap-1.5 px-3 pt-2 mt-1 border-t border-slate-100 text-slate-400">
+          <Kbd>↑</Kbd><Kbd>↓</Kbd>
+          <span className="text-[0.7rem] font-semibold">scorri</span>
+          <Kbd className="ml-2">Tab</Kbd>
+          <span className="text-[0.7rem] font-semibold">accetta e prosegui</span>
+        </div>
       </div>
     );
   }
@@ -590,14 +373,6 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       phase: filters.phase !== 'all' ? filters.phase : prev.phase
     }))
   }, [defaultCostCenterId, filters.cc, filters.phase])
-
-  const inlinePhaseOptions = useMemo(() => {
-    const list = phaseOptions.filter(p => p.id !== 'all')
-    if (list.length === 0) {
-      return [{ id: 'Generale', label: 'Generale' }]
-    }
-    return list
-  }, [phaseOptions])
 
   const handleStartEdit = (mat) => {
     setEditingId(mat.id)
@@ -663,62 +438,16 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
     }
   }
 
+  // Un solo gestore per entrambi i contesti: cambia solo dove finisce la
+  // fase appena creata. Prima erano due funzioni identiche di 28 righe.
   const handleAddNewPhase = async (newPhaseName) => {
-    const trimmed = newPhaseName.trim()
-    if (!trimmed) return
-
-    try {
-      const currentSettings = await invoke('get_global_settings')
-      const phases = currentSettings.phases_material || []
-
-      if (!phases.includes(trimmed)) {
-        const updatedPhases = [...phases, trimmed]
-        const newSettings = {
-          ...currentSettings,
-          phases_material: updatedPhases
-        }
-
-        await invoke('save_global_settings', { settings: newSettings })
-        setPhaseOptions([
-          { id: 'all', label: 'Tutte le Fasi' },
-          ...updatedPhases.map(p => ({ id: p, label: p }))
-        ])
-      }
-
-      setInlineFormData(prev => ({ ...prev, phase: trimmed }))
-    } catch (err) {
-      console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
-    }
+    const created = await addPhase(newPhaseName)
+    if (created) setInlineFormData(prev => ({ ...prev, phase: created }))
   }
 
   const handleAddNewPhaseForBox = async (newPhaseName) => {
-    const trimmed = newPhaseName.trim()
-    if (!trimmed) return
-
-    try {
-      const currentSettings = await invoke('get_global_settings')
-      const phases = currentSettings.phases_material || []
-
-      if (!phases.includes(trimmed)) {
-        const updatedPhases = [...phases, trimmed]
-        const newSettings = {
-          ...currentSettings,
-          phases_material: updatedPhases
-        }
-
-        await invoke('save_global_settings', { settings: newSettings })
-        setPhaseOptions([
-          { id: 'all', label: 'Tutte le Fasi' },
-          ...updatedPhases.map(p => ({ id: p, label: p }))
-        ])
-      }
-
-      setNewMaterialData(prev => ({ ...prev, phase: trimmed }))
-    } catch (err) {
-      console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
-    }
+    const created = await addPhase(newPhaseName)
+    if (created) setNewMaterialData(prev => ({ ...prev, phase: created }))
   }
 
   const validateBox = () => {
@@ -760,8 +489,61 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
         unit_price: 0
       }))
       setNewMaterialErrors({})
+      // Il box conserva centro di costo, fase e data: riportare il fuoco sul
+      // codice significa poter digitare la riga successiva immediatamente.
+      boxFirstFieldRef.current?.focus()
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  /**
+   * Tastiera del box di inserimento.
+   *
+   * Ascolta sul contenitore invece che su ogni singolo campo: gli eventi
+   * risalgono, e cosi' basta un gestore per una decina di input.
+   *
+   * - **Invio** salva la riga (solo se il fuoco e' su un campo di testo: sui
+   *   pulsanti Invio significa gia' "premi il pulsante");
+   * - **Esc** svuota i campi variabili senza toccare quelli che si ripetono.
+   *
+   * Gli eventi gia' consumati dall'autocomplete arrivano qui con
+   * `defaultPrevented` a true e vengono lasciati stare.
+   */
+  const handleBoxKeyDown = (e) => {
+    if (e.defaultPrevented) return
+
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+      e.preventDefault()
+      if (!isAddDisabled) handleAddNewMaterialFromBox()
+      return
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setNewMaterialData(prev => ({
+        ...prev,
+        code: '',
+        description: '',
+        supplier: '',
+        quantity: 1,
+        unit_price: 0
+      }))
+      setNewMaterialErrors({})
+      boxFirstFieldRef.current?.focus()
+    }
+  }
+
+  /** Tastiera della riga in modifica: Invio salva, Esc annulla. */
+  const handleInlineRowKeyDown = (e) => {
+    if (e.defaultPrevented) return
+
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+      e.preventDefault()
+      handleSaveInternal()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleCancel()
     }
   }
 
@@ -769,7 +551,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
     if (!inlineFormData) return null;
 
     return (
-      <tr className="bg-accent/[0.03] hover:bg-accent/[0.05] transition-colors border-y border-slate-100">
+      <tr onKeyDown={handleInlineRowKeyDown} className="bg-accent/[0.03] hover:bg-accent/[0.05] transition-colors border-y border-slate-100">
         <td className="px-6 py-4 w-12"></td>
         {/* Codice */}
         <td className="px-8 py-4">
@@ -914,7 +696,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
               € {((inlineFormData.quantity || 0) * (inlineFormData.unit_price || 0) * (1 + (inlineFormData.markup || 0))).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
             </p>
             <div className="flex items-center gap-1 justify-end">
-              <span className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">Ric.%</span>
+              <span className="text-[0.7rem] font-black text-emerald-500 uppercase tracking-widest">Ric.%</span>
               <input 
                 type="number"
                 placeholder="Ricarico"
@@ -922,7 +704,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                 onChange={(e) => setInlineFormData(p => ({ ...p, markup: (parseFloat(e.target.value) || 0) / 100 }))}
                 onFocus={handleInputSelect}
                 onClick={handleInputSelect}
-                className="w-12 bg-white border border-slate-200 rounded-xl px-1.5 py-1 text-[0.65rem] font-bold text-right text-emerald-600 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+                className="w-12 bg-white border border-slate-200 rounded-xl px-1.5 py-1 text-[0.75rem] font-bold text-right text-emerald-600 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
               />
             </div>
           </div>
@@ -1048,18 +830,26 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       </div>
       {/* Box Aggiunta Materiale Persistente */}
       {onSave && isBoxOpen && (
-        <div className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
+        <div onKeyDown={handleBoxKeyDown} className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
                 <Plus size={14} className="stroke-[3]" />
               </div>
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-500">Nuovo Articolo</span>
+              <span className="text-[0.72rem] font-black uppercase tracking-widest text-slate-500">Nuovo Articolo</span>
+              <span className="hidden lg:flex items-center gap-1.5 ml-3 text-slate-400">
+                <Kbd>Invio</Kbd>
+                <span className="text-[0.7rem] font-semibold">salva</span>
+                <Kbd>Tab</Kbd>
+                <span className="text-[0.7rem] font-semibold">accetta</span>
+                <Kbd>Esc</Kbd>
+                <span className="text-[0.7rem] font-semibold">svuota</span>
+              </span>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
-                <span className="text-sm font-black text-slate-800">
+                <span className="text-[0.72rem] font-semibold text-slate-500 mr-2">Tot. vendita</span>
+                <span className="text-sm font-black text-slate-800 tabular-nums">
                   € {((newMaterialData.quantity || 0) * (newMaterialData.unit_price || 0) * (1 + (newMaterialData.markup || 0))).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -1076,10 +866,11 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
             {/* Codice */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Codice *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 ml-1">Codice *</label>
               <div className="relative">
-                <input 
-                  type="text" 
+                <input
+                  ref={boxFirstFieldRef}
+                  type="text"
                   placeholder="Codice..."
                   value={newMaterialData.code}
                   onChange={handleBoxCodeChange}
@@ -1097,7 +888,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Descrizione */}
             <div className="lg:col-span-4 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione Articolo *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione Articolo *</label>
               <div className="relative">
                 <input 
                   type="text" 
@@ -1117,7 +908,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Fornitore */}
             <div className="lg:col-span-3 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore</label>
               <div className="relative">
                 <input 
                   type="text" 
@@ -1137,7 +928,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
             {/* Centro di Costo */}
             {!defaultCostCenterId && (
               <div className="lg:col-span-3 space-y-1.5">
-                <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
                 <select
                   value={newMaterialData.cost_center_id || ''}
                   onChange={(e) => setNewMaterialData(p => ({ ...p, cost_center_id: e.target.value ? parseInt(e.target.value) : null }))}
@@ -1153,7 +944,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Ambito (Fase) */}
             <div className="lg:col-span-3 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fase / Ambito</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fase / Ambito</label>
               <PhaseSelector
                 phases={inlinePhaseOptions}
                 value={newMaterialData.phase}
@@ -1166,7 +957,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Data */}
             <div className={`${defaultCostCenterId ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-1.5`}>
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
               <DatePicker 
                 compact={true}
                 value={newMaterialData.date}
@@ -1176,7 +967,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Q.tà / U.M. */}
             <div className={`${defaultCostCenterId ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-1.5`}>
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Q.tà / U.M. *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Q.tà / U.M. *</label>
               <div className="flex gap-1 items-center">
                 <input 
                   type="number" 
@@ -1202,7 +993,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Prezzo Cad. */}
             <div className={`${defaultCostCenterId ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-1.5`}>
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Prezzo Cad.</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Prezzo Cad.</label>
               <div className="flex items-center gap-1">
                 <span className="text-xs font-bold text-slate-400">€</span>
                 <input 
@@ -1220,7 +1011,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
             {/* Ricarico (%) */}
             <div className="lg:col-span-1 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric.%</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric.%</label>
               <input 
                 type="number"
                 placeholder="Ric.%"
@@ -1237,7 +1028,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
               <button 
                 onClick={handleAddNewMaterialFromBox}
                 disabled={isAddDisabled}
-                className={`w-full py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
+                className={`w-full py-2 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
                   isAddDisabled 
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
                     : 'bg-accent text-white hover:bg-accent/90 shadow-md shadow-accent/15'
@@ -1253,7 +1044,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       {/* Toolbar Filtri Materiali */}
       <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/50 shadow-sm">
         <div className="flex-1 w-full space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Articolo</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Articolo</label>
           <div className="relative group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent transition-colors" size={18} />
             <input 
@@ -1267,7 +1058,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
         </div>
         
         <div className="w-full lg:w-64 space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
           <Select 
             options={phaseOptions}
             value={filters.phase}
@@ -1279,7 +1070,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
 
         {!defaultCostCenterId && (
           <div className="w-full lg:w-64 space-y-2">
-            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
+            <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
             <Select 
               options={ccOptions}
               value={filters.cc}
@@ -1317,36 +1108,36 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                     className="rounded border-slate-300 text-accent focus:ring-accent" 
                   />
                 </th>
-                <th onClick={() => handleSort('code')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('code')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Codice <SortIcon field="code" /></div>
                 </th>
-                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Descrizione <SortIcon field="description" /></div>
                 </th>
-                <th onClick={() => handleSort('supplier')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('supplier')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Fornitore <SortIcon field="supplier" /></div>
                 </th>
                 {!defaultCostCenterId && (
-                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                     <div className="flex items-center gap-2">Centro di Costo <SortIcon field="cost_center" /></div>
                   </th>
                 )}
-                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Ambito <SortIcon field="phase" /></div>
                 </th>
-                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Data <SortIcon field="date" /></div>
                 </th>
-                <th onClick={() => handleSort('quantity')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('quantity')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Q.tà <SortIcon field="quantity" /></div>
                 </th>
-                <th onClick={() => handleSort('price')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('price')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Prezzo Cad. <SortIcon field="price" /></div>
                 </th>
-                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Tot. Vendita <SortIcon field="total" /></div>
                 </th>
-                <th className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
+                <th className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1366,7 +1157,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-2">
                         <Hash size={14} className="text-accent/40" />
-                        <span className="text-[0.65rem] font-black text-accent uppercase tracking-widest">{mat.code || 'N/D'}</span>
+                        <span className="text-[0.75rem] font-black text-accent uppercase tracking-widest">{mat.code || 'N/D'}</span>
                       </div>
                     </td>
                     <td className="px-8 py-6">
@@ -1384,7 +1175,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                           <div className={`p-2 rounded-lg ${mat.cost_center_id ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-300'}`}>
                             <Target size={14} />
                           </div>
-                          <span className={`text-[0.65rem] font-black uppercase tracking-tight ${mat.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
+                          <span className={`text-[0.75rem] font-black uppercase tracking-tight ${mat.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
                             {mat.cost_center_name || 'Generale'}
                           </span>
                         </div>
@@ -1395,7 +1186,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                         <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
                           <Layers size={14} />
                         </div>
-                        <span className={`text-[0.65rem] font-black uppercase tracking-tight ${mat.phase ? 'text-slate-800' : 'text-slate-400'}`}>
+                        <span className={`text-[0.75rem] font-black uppercase tracking-tight ${mat.phase ? 'text-slate-800' : 'text-slate-400'}`}>
                           {mat.phase || 'Generale'}
                         </span>
                       </div>
@@ -1417,7 +1208,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                         <p className="text-sm font-black text-slate-800">
                           € {((mat.quantity * mat.unit_price) * (1 + mat.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </p>
-                        <p className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">
+                        <p className="text-[0.7rem] font-black text-emerald-500 uppercase tracking-widest">
                           Ric. {(mat.markup * 100).toFixed(0)}%
                         </p>
                       </div>
@@ -1463,7 +1254,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                       {hasActiveFilters && (
                         <button 
                           onClick={() => setFilters(initialFilters)}
-                          className="mt-4 text-accent font-black uppercase tracking-[0.2em] text-[0.6rem] hover:tracking-[0.3em] transition-all"
+                          className="mt-4 text-accent font-black uppercase tracking-[0.2em] text-[0.72rem] hover:tracking-[0.3em] transition-all"
                         >
                           Resetta Filtri
                         </button>
@@ -1507,7 +1298,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                 </span>
                 <div className="h-4 w-px bg-white/20"></div>
                 <span className="text-xs font-medium text-slate-300">
-                  {isPhase ? 'Cambio ambito per ' : 'Sposto '} {pendingMove.materialIds.length} {pendingMove.materialIds.length === 1 ? 'materiale' : 'materiali'} in <strong className="text-white font-black">{isPhase ? pendingMove.targetPhase : pendingMove.targetCCName}</strong> ({countdown}s)
+                  {isPhase ? 'Cambio ambito per ' : 'Sposto '} {pendingMove.ids.length} {pendingMove.ids.length === 1 ? 'materiale' : 'materiali'} in <strong className="text-white font-black">{isPhase ? pendingMove.payload.targetPhase : pendingMove.payload.targetCCName}</strong> ({countdown}s)
                 </span>
                 <div className="h-4 w-px bg-white/20"></div>
                 <div className="flex items-center gap-4">
@@ -1518,13 +1309,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                     Annulla
                   </button>
                   <button 
-                    onClick={() => {
-                      if (isPhase) {
-                        executePendingPhaseUpdate(pendingMove.targetPhase, pendingMove.materialIds);
-                      } else {
-                        executePendingMove(pendingMove.targetCCId, pendingMove.materialIds);
-                      }
-                    }}
+                    onClick={runPendingNow}
                     className="text-xs font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
                   >
                     Conferma Ora
@@ -1564,7 +1349,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                                 startPendingMove(cc.id.toString());
                                 setIsMoveOpen(false);
                               }}
-                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                             >
                               <span>{cc.brand ? `${cc.brand} ` : ''}{cc.model} ({cc.category})</span>
                             </button>
@@ -1602,7 +1387,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                             startPendingPhaseUpdate('Generale');
                             setIsPhaseOpen(false);
                           }}
-                          className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                          className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                         >
                           <span>Generale</span>
                         </button>
@@ -1614,7 +1399,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
                               startPendingPhaseUpdate(p.id);
                               setIsPhaseOpen(false);
                             }}
-                            className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                            className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                           >
                             <span>{p.label}</span>
                           </button>

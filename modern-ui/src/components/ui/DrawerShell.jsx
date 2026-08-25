@@ -51,7 +51,7 @@ const DrawerShell = ({ isOpen, onClose, title, subtitle, icon, children, footer,
             )}
             <div>
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">{title}</h2>
-              {subtitle && <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">{subtitle}</p>}
+              {subtitle && <p className="text-[0.75rem] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">{subtitle}</p>}
             </div>
           </div>
           <button onClick={onClose} className="p-3 hover:bg-slate-100 rounded-2xl transition-colors text-slate-400 hover:text-slate-600">

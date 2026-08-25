@@ -27,7 +27,7 @@ const FiscalFormGroup = ({ formData, handleChange, errors }) => {
              />
           </div>
           {errors?.vat_id && (
-            <div className="flex items-center gap-1.5 px-2 text-[0.6rem] font-bold text-rose-500 animate-premium-in">
+            <div className="flex items-center gap-1.5 px-2 text-[0.72rem] font-bold text-rose-500 animate-premium-in">
               <AlertCircle size={12} /> {errors.vat_id}
             </div>
           )}
@@ -45,7 +45,7 @@ const FiscalFormGroup = ({ formData, handleChange, errors }) => {
              />
           </div>
           {errors?.tax_code && (
-            <div className="flex items-center gap-1.5 px-2 text-[0.6rem] font-bold text-rose-500 animate-premium-in">
+            <div className="flex items-center gap-1.5 px-2 text-[0.72rem] font-bold text-rose-500 animate-premium-in">
               <AlertCircle size={12} /> {errors.tax_code}
             </div>
           )}

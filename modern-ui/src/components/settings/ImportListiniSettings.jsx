@@ -29,6 +29,14 @@ import {
 import ConfirmModal from '../ui/ConfirmModal'
 import Select from '../ui/Select'
 
+/**
+ * L'estrazione degli articoli da PDF non e' implementata: il percorso
+ * precedente restituiva 5 articoli di esempio hardcoded e dichiarava
+ * "aggiornamento completato" senza scrivere nulla sul database.
+ */
+const PDF_UNSUPPORTED_MESSAGE =
+  "Import da PDF non ancora supportato. Usa il file XML della fattura elettronica, oppure un listino in formato Excel o CSV."
+
 const ImportListiniSettings = () => {
   const [summary, setSummary] = useState({ total_count: 0, suppliers: [] })
   const [loadingSummary, setLoadingSummary] = useState(true)
@@ -42,13 +50,13 @@ const ImportListiniSettings = () => {
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
-  // PDF import states
-  const [selectedPdfPath, setSelectedPdfPath] = useState('')
-  const [pdfImporting, setPdfImporting] = useState(false)
-  const [pdfPreviewItems, setPdfPreviewItems] = useState([])
-  const [loadingPdfPreview, setLoadingPdfPreview] = useState(false)
-  const [pdfMappings, setPdfMappings] = useState([])
-  const [isXmlFile, setIsXmlFile] = useState(false)
+  // Import da fattura elettronica (XML)
+  const [selectedInvoicePath, setSelectedInvoicePath] = useState('')
+  const [invoiceImporting, setInvoiceImporting] = useState(false)
+  const [invoiceItems, setInvoiceItems] = useState([])
+  const [loadingInvoicePreview, setLoadingInvoicePreview] = useState(false)
+  const [invoiceMappings, setInvoiceMappings] = useState([])
+  const [invoiceSupplier, setInvoiceSupplier] = useState('')
   const [rowSearchResults, setRowSearchResults] = useState({})
   const [rowSearchQueries, setRowSearchQueries] = useState({})
 
@@ -120,14 +128,16 @@ const ImportListiniSettings = () => {
               const ext = filePath.split('.').pop().toLowerCase()
               if (['xlsx', 'xls', 'xlsm', 'xlsb', 'csv'].includes(ext)) {
                 setSelectedFilePath(filePath)
-                setSelectedPdfPath('')
+                setSelectedInvoicePath('')
                 setStatus({ type: '', message: '' })
-              } else if (ext === 'pdf' || ext === 'xml') {
-                setSelectedPdfPath(filePath)
+              } else if (ext === 'xml') {
+                setSelectedInvoicePath(filePath)
                 setSelectedFilePath('')
                 setStatus({ type: '', message: '' })
+              } else if (ext === 'pdf') {
+                setStatus({ type: 'error', message: PDF_UNSUPPORTED_MESSAGE })
               } else {
-                setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel, CSV, PDF o XML.' })
+                setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel, CSV o XML.' })
               }
             }
           }
@@ -175,66 +185,57 @@ const ImportListiniSettings = () => {
   }, [selectedFilePath])
 
   useEffect(() => {
-    if (selectedPdfPath) {
-      const fetchPdfPreview = async () => {
-        setLoadingPdfPreview(true)
-        setPdfPreviewItems([])
-        try {
-          const ext = selectedPdfPath.split('.').pop().toLowerCase()
-          if (ext === 'xml') {
-            setIsXmlFile(true)
-            const rows = await invoke('parse_invoice_xml', { filePath: selectedPdfPath })
-            const preview = rows.map(r => ({
-              description: r.invoice_item.description,
-              unit: r.invoice_item.unit,
-              unit_price: r.invoice_item.unit_price,
-              supplier: 'MARCHIOL S.P.A.'
-            }))
-            setPdfPreviewItems(preview)
-            setIsImportOverlayOpen(true)
-            
-            const formattedMappings = rows.map(r => ({
-              id: r.id,
-              pdfItem: {
-                description: r.invoice_item.description,
-                unit: r.invoice_item.unit,
-                unit_price: r.invoice_item.unit_price,
-                supplier: 'MARCHIOL S.P.A.'
-              },
-              suggestedItem: r.suggested_item,
-              matchScore: r.match_score,
-              action: r.action,
-              selectedCatalogItemId: r.selected_catalog_item_id,
-              customCode: r.custom_code,
-              invoiceItem: r.invoice_item,
-              markup: r.markup !== null && r.markup !== undefined ? r.markup : 0.0
-            }))
-            setPdfMappings(formattedMappings)
-          } else {
-            setIsXmlFile(false)
-            // Simulate loading PDF items (descriptions and prices only, no codes)
-            await new Promise(resolve => setTimeout(resolve, 1500))
-            setPdfPreviewItems([
-              { description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.85, supplier: 'Fornitore Generico' },
-              { description: 'Scatola derivazione PT6 da incasso con coperchio', unit: 'pz', unit_price: 4.20, supplier: 'Fornitore Generico' },
-              { description: 'Interruttore bipolare 16A compatibile serie civile', unit: 'pz', unit_price: 7.90, supplier: 'Fornitore Generico' },
-              { description: 'Tubo corrugato RK15 diametro 20 mm autoestinguente', unit: 'm', unit_price: 0.35, supplier: 'Fornitore Generico' },
-              { description: 'Plafoniera LED 30W 4000K IP65 tenuta stagna', unit: 'pz', unit_price: 24.50, supplier: 'Fornitore Generico' }
-            ])
-            setIsImportOverlayOpen(true)
-          }
-        } catch (err) {
-          console.error("Errore caricamento anteprima:", err)
-          setStatus({ type: 'error', message: 'Impossibile leggere il file: ' + err })
-        } finally {
-          setLoadingPdfPreview(false)
-        }
-      }
-      fetchPdfPreview()
-    } else {
-      setPdfPreviewItems([])
+    if (!selectedInvoicePath) {
+      setInvoiceItems([])
+      return
     }
-  }, [selectedPdfPath])
+
+    const fetchInvoicePreview = async () => {
+      setLoadingInvoicePreview(true)
+      setInvoiceItems([])
+      try {
+        // Il backend restituisce anche il fornitore letto dal blocco
+        // CedentePrestatore della fattura: prima era hardcoded lato frontend
+        // e tutti gli articoli finivano a listino sotto lo stesso nome.
+        const result = await invoke('parse_invoice_xml', { filePath: selectedInvoicePath })
+        const supplier = result.supplier || 'Fornitore Generico'
+        setInvoiceSupplier(supplier)
+
+        setInvoiceItems(result.rows.map(r => ({
+          description: r.invoice_item.description,
+          unit: r.invoice_item.unit,
+          unit_price: r.invoice_item.unit_price,
+          supplier
+        })))
+
+        setInvoiceMappings(result.rows.map(r => ({
+          id: r.id,
+          invoiceRow: {
+            description: r.invoice_item.description,
+            unit: r.invoice_item.unit,
+            unit_price: r.invoice_item.unit_price,
+            supplier
+          },
+          suggestedItem: r.suggested_item,
+          matchScore: r.match_score,
+          action: r.action,
+          selectedCatalogItemId: r.selected_catalog_item_id,
+          customCode: r.custom_code,
+          invoiceItem: r.invoice_item,
+          markup: r.markup !== null && r.markup !== undefined ? r.markup : 0.0
+        })))
+
+        setIsImportOverlayOpen(true)
+      } catch (err) {
+        console.error("Errore caricamento anteprima:", err)
+        setStatus({ type: 'error', message: 'Impossibile leggere il file: ' + err })
+      } finally {
+        setLoadingInvoicePreview(false)
+      }
+    }
+
+    fetchInvoicePreview()
+  }, [selectedInvoicePath])
 
   useEffect(() => {
     if (isImportOverlayOpen) {
@@ -250,52 +251,7 @@ const ImportListiniSettings = () => {
     }
   }, [isImportOverlayOpen])
 
-  useEffect(() => {
-    if (pdfPreviewItems.length > 0 && !isXmlFile) {
-      const defaultMappings = pdfPreviewItems.map((item, idx) => {
-        let suggestedItem = null
-        let matchScore = 0
-        let action = 'ignore'
 
-        if (idx === 0) {
-          suggestedItem = { id: 101, code: 'CAV-FG16-3G2.5', description: 'Cavo FG16OR16 3G2.5 mm² - Isolamento Butilico', unit: 'm', unit_price: 1.72, markup: 0.25 }
-          matchScore = 95
-          action = 'update'
-        } else if (idx === 1) {
-          suggestedItem = { id: 102, code: 'SCAT-PT6', description: 'Scatola derivazione PT6 c/cop', unit: 'pz', unit_price: 3.90, markup: 0.20 }
-          matchScore = 88
-          action = 'update'
-        } else if (idx === 2) {
-          suggestedItem = { id: 103, code: 'INT-BIPT16', description: 'Interruttore bipolare 16A', unit: 'pz', unit_price: 7.20, markup: 0.25 }
-          matchScore = 84
-          action = 'update'
-        } else if (idx === 3) {
-          suggestedItem = { id: 104, code: 'TUB-RK15-20', description: 'Tubo corrugato RK15 d20', unit: 'm', unit_price: 0.38, markup: 0.15 }
-          matchScore = 79
-          action = 'update'
-        } else if (idx === 4) {
-          // Low similarity or not found
-          suggestedItem = null
-          matchScore = 0
-          action = 'create'
-        }
-
-        return {
-          id: idx,
-          pdfItem: item,
-          suggestedItem,
-          matchScore,
-          action, // 'update', 'create', 'ignore'
-          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null,
-          customCode: idx === 4 ? 'PLAF-LED-30W-NEW' : '',
-          markup: suggestedItem ? (suggestedItem.markup || 0.0) : 0.0
-        }
-      })
-      setPdfMappings(defaultMappings)
-    } else if (pdfPreviewItems.length === 0) {
-      setPdfMappings([])
-    }
-  }, [pdfPreviewItems, isXmlFile])
 
   // Debounce per la ricerca del catalogo
   useEffect(() => {
@@ -439,7 +395,7 @@ const ImportListiniSettings = () => {
       })
       if (selected) {
         setSelectedFilePath(selected)
-        setSelectedPdfPath('')
+        setSelectedInvoicePath('')
       }
     } catch (err) {
       setStatus({ type: 'error', message: 'Errore selezione file: ' + err })
@@ -469,18 +425,18 @@ const ImportListiniSettings = () => {
     }
   }
 
-  const handleSelectPdfFile = async () => {
+  const handleSelectInvoiceFile = async () => {
     try {
       setStatus({ type: '', message: '' })
       const selected = await openFileDialog({
         multiple: false,
         filters: [{
-          name: 'Fattura PDF o XML',
-          extensions: ['pdf', 'xml']
+          name: 'Fattura Elettronica XML',
+          extensions: ['xml']
         }]
       })
       if (selected) {
-        setSelectedPdfPath(selected)
+        setSelectedInvoicePath(selected)
         setSelectedFilePath('')
       }
     } catch (err) {
@@ -488,73 +444,66 @@ const ImportListiniSettings = () => {
     }
   }
 
-  const handleImportPdf = () => {
-    if (!selectedPdfPath) return
+  const handleImportInvoice = () => {
+    if (!selectedInvoicePath) return
     setIsImportConfirmOpen(true)
   }
 
-  const executeImportPdf = async () => {
+  const executeImportInvoice = async () => {
     setIsImportConfirmOpen(false)
-    setPdfImporting(true)
+    setInvoiceImporting(true)
     setStatus({ type: '', message: '' })
     try {
-      const ext = selectedPdfPath.split('.').pop().toLowerCase()
-      if (ext === 'xml') {
-        const rustMappings = pdfMappings.map(m => ({
-          id: m.id,
-          invoice_item: m.invoiceItem,
-          suggested_item: m.suggestedItem,
-          match_score: m.matchScore,
-          action: m.action,
-          selected_catalog_item_id: m.selectedCatalogItemId,
-          custom_code: m.customCode,
-          markup: m.markup
-        }))
-        
-        await invoke('import_invoice_mappings', {
-          mappings: rustMappings,
-          supplier: 'MARCHIOL S.P.A.'
-        })
-        
-        const processed = rustMappings.filter(m => m.action !== 'ignore')
-        setStatus({ 
-          type: 'success', 
-          message: `Importazione XML completata con successo! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${rustMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${rustMappings.filter(m => m.action === 'create').length}).` 
-        })
-      } else {
-        // Simulate database update for PDF
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        const processed = pdfMappings.filter(m => m.action !== 'ignore')
-        setStatus({ 
-          type: 'success', 
-          message: `Aggiornamento da PDF completato! Elaborati ${processed.length} articoli (Aggiornati/Associati: ${pdfMappings.filter(m => m.action === 'update').length}, Nuovi Creati: ${pdfMappings.filter(m => m.action === 'create').length}).` 
-        })
-      }
-      setSelectedPdfPath('')
+      const rustMappings = invoiceMappings.map(m => ({
+        id: m.id,
+        invoice_item: m.invoiceItem,
+        suggested_item: m.suggestedItem,
+        match_score: m.matchScore,
+        action: m.action,
+        selected_catalog_item_id: m.selectedCatalogItemId,
+        custom_code: m.customCode,
+        markup: m.markup
+      }))
+
+      await invoke('import_invoice_mappings', {
+        mappings: rustMappings,
+        supplier: invoiceSupplier || 'Fornitore Generico'
+      })
+
+      const updated = rustMappings.filter(m => m.action === 'update').length
+      const created = rustMappings.filter(m => m.action === 'create').length
+      setStatus({
+        type: 'success',
+        message: `Importazione XML completata! Elaborati ${updated + created} articoli (Aggiornati/Associati: ${updated}, Nuovi Creati: ${created}).`
+      })
+
+      setSelectedInvoicePath('')
       setIsImportOverlayOpen(false)
       loadSummary()
     } catch (err) {
       console.error("Errore importazione:", err)
       setStatus({ type: 'error', message: 'Errore importazione: ' + err })
     } finally {
-      setPdfImporting(false)
+      setInvoiceImporting(false)
     }
   }
 
   const handleUpdateMappingAction = (rowId, action) => {
-    setPdfMappings(prev => prev.map(m => {
+    setInvoiceMappings(prev => prev.map(m => {
       if (m.id === rowId) {
-        let suggestedItem = m.suggestedItem
-        // Default mock suggestion if switching back to 'update'
-        if (action === 'update' && !suggestedItem) {
-          suggestedItem = { id: 105, code: 'NEW-MOCK-CODE', description: m.pdfItem.description, unit: m.pdfItem.unit, unit_price: 10.00, markup: 0.25 }
-        }
+        // Senza un articolo di listino associato non c'e' niente da
+        // aggiornare: si ricade su "crea". In precedenza veniva fabbricato un
+        // suggerimento fittizio con id 105, e l'import sovrascriveva prezzo e
+        // ricarico di un articolo reale scelto a caso.
+        const suggestedItem = m.suggestedItem
+        const effectiveAction = action === 'update' && !suggestedItem ? 'create' : action
+
         return {
           ...m,
-          action,
+          action: effectiveAction,
           suggestedItem,
-          selectedCatalogItemId: suggestedItem ? suggestedItem.id : null,
-          markup: action === 'update' && suggestedItem ? (suggestedItem.markup || 0.0) : 0.0
+          selectedCatalogItemId: effectiveAction === 'update' && suggestedItem ? suggestedItem.id : null,
+          markup: effectiveAction === 'update' && suggestedItem ? (suggestedItem.markup || 0.0) : 0.0
         }
       }
       return m
@@ -562,11 +511,11 @@ const ImportListiniSettings = () => {
   }
 
   const handleCustomCodeChange = (rowId, val) => {
-    setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, customCode: val } : m))
+    setInvoiceMappings(prev => prev.map(m => m.id === rowId ? { ...m, customCode: val } : m))
   }
 
   const handleMarkupChange = (rowId, val) => {
-    setPdfMappings(prev => prev.map(m => m.id === rowId ? { ...m, markup: val } : m))
+    setInvoiceMappings(prev => prev.map(m => m.id === rowId ? { ...m, markup: val } : m))
   }
 
   const handleSearchAlternativeCatalogItem = async (rowId, query) => {
@@ -584,7 +533,7 @@ const ImportListiniSettings = () => {
   }
 
   const handleSelectAlternativeItem = (rowId, item) => {
-    setPdfMappings(prev => prev.map(m => {
+    setInvoiceMappings(prev => prev.map(m => {
       if (m.id === rowId) {
         return {
           ...m,
@@ -635,7 +584,7 @@ const ImportListiniSettings = () => {
         <div className="relative flex gap-1 bg-white/50 backdrop-blur-md p-1 rounded-2xl border border-slate-200/50 shadow-sm shrink-0">
           <button
             onClick={() => setActiveSettingsTab('import')}
-            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all z-10 ${
               activeSettingsTab === 'import' 
                 ? 'text-white' 
                 : 'text-slate-400 hover:text-slate-600'
@@ -653,7 +602,7 @@ const ImportListiniSettings = () => {
           </button>
           <button
             onClick={() => setActiveSettingsTab('view')}
-            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all z-10 ${
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all z-10 ${
               activeSettingsTab === 'view' 
                 ? 'text-white' 
                 : 'text-slate-400 hover:text-slate-600'
@@ -729,7 +678,7 @@ const ImportListiniSettings = () => {
                     <button
                       onClick={handleSelectFile}
                       disabled={importing}
-                      className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.65rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
+                      className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.75rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
                     >
                       Sfoglia file...
                     </button>
@@ -745,9 +694,9 @@ const ImportListiniSettings = () => {
                           <Eye size={14} className="text-teal-600 animate-pulse" /> Anteprima Dati (Primi 5 articoli)
                         </span>
                         {loadingPreview ? (
-                          <span className="text-[0.65rem] font-bold text-slate-400 animate-pulse">Caricamento anteprima...</span>
+                          <span className="text-[0.75rem] font-bold text-slate-400 animate-pulse">Caricamento anteprima...</span>
                         ) : previewItems.length > 0 ? (
-                          <span className="text-[0.65rem] font-black text-teal-600 uppercase tracking-widest bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 flex items-center gap-1 shadow-sm">
+                          <span className="text-[0.75rem] font-black text-teal-600 uppercase tracking-widest bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 flex items-center gap-1 shadow-sm">
                             <CheckCircle2 size={10} /> Struttura Rilevata
                           </span>
                         ) : null}
@@ -756,19 +705,19 @@ const ImportListiniSettings = () => {
                       {loadingPreview ? (
                         <div className="flex flex-col items-center justify-center py-8 space-y-3 bg-white/40 backdrop-blur-sm border border-slate-100 rounded-2xl">
                           <Loader2 size={24} className="animate-spin text-teal-600" />
-                          <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Lettura righe in corso...</span>
+                          <span className="text-[0.75rem] font-black text-slate-400 uppercase tracking-widest">Lettura righe in corso...</span>
                         </div>
                       ) : previewItems.length > 0 ? (
                         <div className="overflow-x-auto rounded-2xl border border-slate-200/50 bg-white/80 shadow-sm">
                           <table className="w-full text-left border-collapse">
                             <thead>
                               <tr className="bg-slate-100/50 border-b border-slate-200/50">
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Codice</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Descrizione</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-center">U.M.</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-right">Prezzo Unit.</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider text-right">Ricarico</th>
-                                <th className="py-2.5 px-4 text-[0.65rem] font-black text-slate-400 uppercase tracking-wider">Fornitore</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider">Codice</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider">Descrizione</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider text-center">U.M.</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider text-right">Prezzo Unit.</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider text-right">Ricarico</th>
+                                <th className="py-2.5 px-4 text-[0.75rem] font-black text-slate-400 uppercase tracking-wider">Fornitore</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -804,7 +753,7 @@ const ImportListiniSettings = () => {
                       ) : (
                         <div className="flex items-center gap-3 p-4 bg-amber-50 text-amber-600 border border-amber-100 rounded-2xl">
                           <AlertCircle size={18} className="shrink-0" />
-                          <span className="text-[0.65rem] font-bold uppercase tracking-wider leading-relaxed">
+                          <span className="text-[0.75rem] font-bold uppercase tracking-wider leading-relaxed">
                             Nessun articolo valido estratto. Verifica che il file Excel o CSV contenga intestazioni corrette (es. Codice, Descrizione, Prezzo) e dati validi.
                           </span>
                         </div>
@@ -819,7 +768,7 @@ const ImportListiniSettings = () => {
                         onChange={(e) => setClearExisting(e.target.checked)}
                         className="w-5 h-5 accent-teal-600 rounded cursor-pointer shrink-0"
                       />
-                      <label htmlFor="clearExisting" className="text-[0.65rem] font-black uppercase tracking-wider text-slate-600 cursor-pointer select-none">
+                      <label htmlFor="clearExisting" className="text-[0.75rem] font-black uppercase tracking-wider text-slate-600 cursor-pointer select-none">
                         Cancella catalogo esistente prima dell'importazione
                       </label>
                     </div>
@@ -844,13 +793,13 @@ const ImportListiniSettings = () => {
 
             <div className="pt-6 border-t border-slate-100 flex items-start gap-3 mt-6">
               <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
-              <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest leading-normal">
+              <span className="text-[0.75rem] font-bold text-slate-400 uppercase tracking-widest leading-normal">
                 Il sistema analizzerà automaticamente le intestazioni delle colonne del file. Si raccomanda di utilizzare nomi standard per le colonne: CODICE, DESCRIZIONE, UM, UNITARIO e FORNITORE.
               </span>
             </div>
           </div>
 
-          {/* CARICAMENTO FILE PDF */}
+          {/* CARICAMENTO FATTURA ELETTRONICA XML */}
           <div className="bg-white/40 backdrop-blur-md border border-white/60 p-10 rounded-[3rem] shadow-xl space-y-6 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-4 border-b border-slate-100 pb-6 mb-6">
@@ -858,8 +807,8 @@ const ImportListiniSettings = () => {
                   <FileText size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aggiornamento da PDF / XML</h3>
-                  <p className="text-xs font-bold text-slate-400">Aggiorna e modifica il listino esistente caricando un file PDF o XML (Fattura Elettronica)</p>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Aggiornamento da Fattura XML</h3>
+                  <p className="text-xs font-bold text-slate-400">Aggiorna e modifica il listino esistente caricando il file XML di una Fattura Elettronica</p>
                 </div>
               </div>
 
@@ -880,40 +829,40 @@ const ImportListiniSettings = () => {
                     <h4 className="text-md font-black text-slate-800 uppercase tracking-tight">
                       {isDragging 
                         ? 'Rilascia il file qui' 
-                        : selectedPdfPath 
+                        : selectedInvoicePath 
                           ? 'Documento Selezionato' 
                           : 'Trascina o Seleziona un file'}
                     </h4>
                     <p className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-widest leading-relaxed px-4 break-all">
                       {isDragging 
-                        ? 'Rilascia il file PDF o XML per caricarlo.' 
-                        : selectedPdfPath 
-                          ? selectedPdfPath 
-                          : 'Trascina qui il file PDF/XML oppure fai click sotto per cercarlo.'}
+                        ? 'Rilascia il file XML per caricarlo.' 
+                        : selectedInvoicePath 
+                          ? selectedInvoicePath 
+                          : 'Trascina qui il file XML della fattura oppure fai click sotto per cercarlo.'}
                     </p>
                   </div>
                   {!isDragging && (
                     <button
-                      onClick={handleSelectPdfFile}
-                      disabled={pdfImporting}
-                      className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.65rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
+                      onClick={handleSelectInvoiceFile}
+                      disabled={invoiceImporting}
+                      className="px-6 py-3 bg-white text-slate-700 hover:bg-slate-50 rounded-xl font-black uppercase tracking-widest text-[0.75rem] border border-slate-200 transition-all shadow-sm disabled:opacity-50"
                     >
                       Sfoglia file...
                     </button>
                   )}
                 </div>
 
-                {selectedPdfPath && (
+                {selectedInvoicePath && (
                   <div className="bg-slate-50/80 rounded-[2.5rem] p-6 border border-slate-100 space-y-4 animate-premium-in text-center">
                     <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
                       <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mx-auto">
                         <Eye size={14} className="text-indigo-600 animate-pulse" /> Riconciliazione Listino Pronta
                       </span>
                     </div>
-                    {loadingPdfPreview ? (
+                    {loadingInvoicePreview ? (
                       <div className="flex flex-col items-center justify-center py-4 space-y-3">
                         <Loader2 size={24} className="animate-spin text-indigo-600" />
-                        <span className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Estrazione dati in corso...</span>
+                        <span className="text-[0.75rem] font-black text-slate-400 uppercase tracking-widest">Estrazione dati in corso...</span>
                       </div>
                     ) : (
                       <>
@@ -925,7 +874,7 @@ const ImportListiniSettings = () => {
                           onClick={() => setIsImportOverlayOpen(true)}
                           className="w-full flex items-center justify-center gap-2 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md"
                         >
-                          <Eye size={14} /> Apri Riconciliazione ({pdfMappings.length} articoli)
+                          <Eye size={14} /> Apri Riconciliazione ({invoiceMappings.length} articoli)
                         </button>
                       </>
                     )}
@@ -936,8 +885,8 @@ const ImportListiniSettings = () => {
 
             <div className="pt-6 border-t border-slate-100 flex items-start gap-3 mt-6">
               <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
-              <span className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest leading-normal">
-                L'elaborazione PDF estrarrà i dati testuali e le tabelle identificando gli articoli per codice o descrizione, per aggiornare i prezzi esistenti o inserire nuove voci nel catalogo.
+              <span className="text-[0.75rem] font-bold text-slate-400 uppercase tracking-widest leading-normal">
+                Gli articoli della fattura vengono riconciliati con il listino per codice o descrizione, per aggiornare i prezzi esistenti o inserire nuove voci. L'import da PDF non è ancora supportato.
               </span>
             </div>
           </div>
@@ -947,7 +896,7 @@ const ImportListiniSettings = () => {
               <button
                 onClick={handleClearCatalog}
                 disabled={clearing}
-                className="flex items-center gap-2 px-5 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-2xl text-[0.65rem] font-black uppercase tracking-widest transition-all shadow-sm"
+                className="flex items-center gap-2 px-5 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-2xl text-[0.75rem] font-black uppercase tracking-widest transition-all shadow-sm"
               >
                 {clearing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Svuota Catalogo Listini
               </button>
@@ -1011,7 +960,7 @@ const ImportListiniSettings = () => {
                 <tr className="bg-slate-100/50 border-b border-slate-200/50">
                   <th 
                     onClick={() => handleCatalogSort('code')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
                   >
                     <div className="flex items-center gap-1.5">
                       Codice <CatalogSortIcon field="code" />
@@ -1019,7 +968,7 @@ const ImportListiniSettings = () => {
                   </th>
                   <th 
                     onClick={() => handleCatalogSort('description')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
                   >
                     <div className="flex items-center gap-1.5">
                       Descrizione <CatalogSortIcon field="description" />
@@ -1027,7 +976,7 @@ const ImportListiniSettings = () => {
                   </th>
                   <th 
                     onClick={() => handleCatalogSort('unit')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-center font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-center font-sans"
                   >
                     <div className="flex items-center justify-center gap-1.5">
                       U.M. <CatalogSortIcon field="unit" />
@@ -1035,7 +984,7 @@ const ImportListiniSettings = () => {
                   </th>
                   <th 
                     onClick={() => handleCatalogSort('unit_price')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
                   >
                     <div className="flex items-center justify-end gap-1.5">
                       Prezzo Unit. <CatalogSortIcon field="unit_price" />
@@ -1043,7 +992,7 @@ const ImportListiniSettings = () => {
                   </th>
                   <th 
                     onClick={() => handleCatalogSort('markup')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none text-right font-sans"
                   >
                     <div className="flex items-center justify-end gap-1.5">
                       Ricarico <CatalogSortIcon field="markup" />
@@ -1051,13 +1000,13 @@ const ImportListiniSettings = () => {
                   </th>
                   <th 
                     onClick={() => handleCatalogSort('supplier')}
-                    className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
+                    className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-200/30 transition-colors select-none font-sans"
                   >
                     <div className="flex items-center gap-1.5">
                       Fornitore <CatalogSortIcon field="supplier" />
                     </div>
                   </th>
-                  <th className="py-4 px-6 text-[0.65rem] font-black text-slate-500 uppercase tracking-wider text-right font-sans">
+                  <th className="py-4 px-6 text-[0.75rem] font-black text-slate-500 uppercase tracking-wider text-right font-sans">
                     Azioni
                   </th>
                 </tr>
@@ -1207,7 +1156,7 @@ const ImportListiniSettings = () => {
           {/* Pagination Controls */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
             <div className="flex items-center gap-3">
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Righe per pagina:</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Righe per pagina:</span>
               <select
                 value={catalogLimit}
                 onChange={(e) => {
@@ -1221,7 +1170,7 @@ const ImportListiniSettings = () => {
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
-              <span className="text-[0.65rem] font-bold text-slate-400">
+              <span className="text-[0.75rem] font-bold text-slate-400">
                 Mostrati {Math.min(totalCatalogCount, (catalogPage - 1) * catalogLimit + 1)}-{Math.min(totalCatalogCount, catalogPage * catalogLimit)} di {totalCatalogCount}
               </span>
             </div>
@@ -1277,7 +1226,7 @@ const ImportListiniSettings = () => {
   {/* Overlay Riconciliazione in sovrapressione con sfondo sfocato, renderizzato a livello di body */}
   {createPortal(
     <AnimatePresence>
-      {isImportOverlayOpen && pdfPreviewItems.length > 0 && (
+      {isImportOverlayOpen && invoiceItems.length > 0 && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4 sm:p-6 md:p-10">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -1292,7 +1241,7 @@ const ImportListiniSettings = () => {
                   <Eye size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Riconciliazione Listino ({isXmlFile ? 'XML' : 'PDF'})</h3>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Riconciliazione Listino (XML)</h3>
                   <p className="text-xs font-bold text-slate-400">Verifica le associazioni suggerite e inserisci i codici mancanti prima di completare l'importazione</p>
                 </div>
               </div>
@@ -1318,7 +1267,7 @@ const ImportListiniSettings = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {pdfMappings.map((m) => {
+                  {invoiceMappings.map((m) => {
                     const isSearching = rowSearchResults[m.id] && rowSearchResults[m.id].length > 0;
                     return (
                       <tr 
@@ -1328,12 +1277,12 @@ const ImportListiniSettings = () => {
                         {/* Articolo PDF */}
                         <td className="py-5 px-6 space-y-2">
                           <div className="text-sm font-black text-slate-800 leading-snug">
-                            {m.pdfItem.description}
+                            {m.invoiceRow.description}
                           </div>
                           <div className="flex gap-3 text-xs font-bold text-slate-400">
-                            <span>UM: {m.pdfItem.unit || 'pz'}</span>
+                            <span>UM: {m.invoiceRow.unit || 'pz'}</span>
                             <span>•</span>
-                            <span className="text-indigo-600 font-extrabold">Prezzo {isXmlFile ? 'XML' : 'PDF'}: € {m.pdfItem.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="text-indigo-600 font-extrabold">Prezzo XML: € {m.invoiceRow.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         </td>
 
@@ -1398,7 +1347,7 @@ const ImportListiniSettings = () => {
                                 </div>
                                 <div className="text-xs font-black uppercase tracking-wider text-slate-400">
                                   Costo: <span className="line-through text-slate-400">€ {m.suggestedItem.unit_price.toFixed(2)}</span>{' '}
-                                  <span className="text-emerald-600">➔ € {m.pdfItem.unit_price.toFixed(2)}</span>
+                                  <span className="text-emerald-600">➔ € {m.invoiceRow.unit_price.toFixed(2)}</span>
                                 </div>
                                 <div className="space-y-1">
                                   <label className="text-xs font-black uppercase tracking-widest text-slate-400">Rincaro (%):</label>
@@ -1557,7 +1506,7 @@ const ImportListiniSettings = () => {
                                   }`}>%</span>
                                 </div>
                                 {(m.markup === 0 || m.markup === undefined || m.markup === null) && (
-                                  <p className="text-[10px] font-bold text-red-500">
+                                  <p className="text-[0.72rem] font-bold text-red-500">
                                     Rincaro non inserito (0%)
                                   </p>
                                 )}
@@ -1581,7 +1530,7 @@ const ImportListiniSettings = () => {
             {/* Footer dell'overlay con tasti di azione */}
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-t border-slate-100 pt-4">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                Articoli da elaborare: {pdfMappings.filter(m => m.action !== 'ignore').length} / {pdfMappings.length}
+                Articoli da elaborare: {invoiceMappings.filter(m => m.action !== 'ignore').length} / {invoiceMappings.length}
               </span>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button
@@ -1594,16 +1543,16 @@ const ImportListiniSettings = () => {
                   Annulla
                 </button>
                 <button
-                  onClick={handleImportPdf}
-                  disabled={pdfImporting}
+                  onClick={handleImportInvoice}
+                  disabled={invoiceImporting}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/10 disabled:opacity-50"
                 >
-                  {pdfImporting ? (
+                  {invoiceImporting ? (
                     <>
                       <Loader2 size={16} className="animate-spin" /> Importazione...
                     </>
                   ) : (
-                    isXmlFile ? 'Applica Modifiche da XML' : 'Applica Modifiche da PDF'
+                    'Applica Modifiche da XML'
                   )}
                 </button>
               </div>
@@ -1618,9 +1567,9 @@ const ImportListiniSettings = () => {
   <ConfirmModal
     isOpen={isImportConfirmOpen}
     onClose={() => setIsImportConfirmOpen(false)}
-    onConfirm={executeImportPdf}
-    title={isXmlFile ? "Conferma Aggiornamento Listino da XML" : "Conferma Aggiornamento Listino da PDF"}
-    message={isXmlFile ? "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file XML della fattura?" : "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file PDF?"}
+    onConfirm={executeImportInvoice}
+    title="Conferma Aggiornamento Listino da XML"
+    message="Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file XML della fattura?"
     confirmText="Sì, procedi"
     cancelText="Annulla"
     type="warning"

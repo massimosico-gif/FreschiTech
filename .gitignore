@@ -39,3 +39,12 @@ x max - DB CONTABILITÀ.xlsx
 PDF esempio (eliminare a test finiti)
 *.tar.gz
 *.sig
+
+# Python (release manager)
+__pycache__/
+*.pyc
+
+# Chiavi di firma: la privata non deve MAI finire nel repository.
+# La .pub non e' segreta, ma vive gia' dentro tauri.conf.json.
+*.key
+*.key.pub

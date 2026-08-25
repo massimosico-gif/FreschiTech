@@ -205,6 +205,27 @@ impl Employee {
     }
 }
 
+/// Descrive un'operazione di salvataggio senza esporne il contenuto.
+///
+/// I log finiscono nel file di diagnostica, che viene allegato ai report di
+/// errore inviati all'assistenza: non devono contenere dati personali
+/// (anagrafiche, contatti, nomi di dipendenti) ne' segreti. Restano gli
+/// identificatori, che sono cio' che serve davvero per seguire un flusso.
+fn log_target(id: Option<i64>) -> String {
+    match id {
+        Some(id) => format!("aggiornamento id={id}"),
+        None => "inserimento".to_string(),
+    }
+}
+
+/// Nome del file senza il percorso.
+///
+/// I percorsi assoluti su Windows contengono il nome utente
+/// (`C:\Users\nome.cognome\...`), che e' a sua volta un dato personale.
+fn log_file_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
 #[tauri::command]
 pub fn get_stats() -> serde_json::Value {
     let conn = match get_connection() {
@@ -424,7 +445,7 @@ pub fn get_clients() -> Result<Vec<Client>, String> {
 
 #[tauri::command]
 pub fn save_client(client: Client) -> Result<(), String> {
-    log::info!("CMD [save_client] Input: {:?}", client);
+    log::info!("CMD [save_client] {}", log_target(client.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
         
@@ -542,7 +563,7 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
 
 #[tauri::command]
 pub fn save_project(project: Project) -> Result<(), String> {
-    log::info!("CMD [save_project] Input: {:?}", project);
+    log::info!("CMD [save_project] {} (client_id={})", log_target(project.id), project.client_id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
         let dist = project.distance.unwrap_or(0);
@@ -557,12 +578,11 @@ pub fn save_project(project: Project) -> Result<(), String> {
                 ),
             ).map_err(|e| e.to_string())?;
 
-            // Aggiorna automaticamente tutte le spese di viaggio (trasferta) esistenti per questo progetto (solo per quelle senza un veicolo specifico)
-            let new_travel_cost = (dist as f64) * k_cost;
-            conn.execute(
-                "UPDATE labor SET travel_cost = ? WHERE project_id = ? AND is_travel = 1 AND (vehicle IS NULL OR vehicle = 'Nessuno')",
-                (new_travel_cost, id),
-            ).map_err(|e| e.to_string())?;
+            // Nessun ricalcolo delle trasferte esistenti: il costo al km e'
+            // definito dal mezzo (vedi `rawVehicles` / `km_cost` nelle
+            // impostazioni Mezzi), non dalla commessa. `distance` e `km_cost`
+            // della commessa restano solo come valori di default proposti
+            // all'inserimento.
         } else {
             conn.execute(
                 "INSERT INTO projects (client_id, name, description, status, start_date, end_date, budget, distance, km_cost, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -614,7 +634,7 @@ pub fn get_cost_centers(project_id: i64) -> Result<Vec<CostCenter>, String> {
 
 #[tauri::command]
 pub fn save_cost_center(cc: CostCenter) -> Result<(), String> {
-    log::info!("CMD [save_cost_center] Input: {:?}", cc);
+    log::info!("CMD [save_cost_center] {} (project_id={})", log_target(cc.id), cc.project_id);
     let result = (|| -> Result<(), String> {
         if cc.model.trim().is_empty() {
             return Err("Il modello del centro di costo non può essere vuoto".to_string());
@@ -660,7 +680,11 @@ pub fn delete_cost_center(id: i64) -> Result<(), String> {
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
         let tx = conn.transaction().map_err(|e| e.to_string())?;
-        
+
+        // Eliminazione esplicita delle voci collegate. Lo schema dichiara
+        // ON DELETE SET NULL su cost_center_id, ma quella e' solo una rete di
+        // sicurezza: a livello applicativo eliminare un centro di costo
+        // significa eliminarne materiali, manodopera e spese, non scollegarli.
         tx.execute("DELETE FROM materials WHERE cost_center_id=?", [id]).map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM labor WHERE cost_center_id=?", [id]).map_err(|e| e.to_string())?;
         tx.execute("DELETE FROM expenses WHERE cost_center_id=?", [id]).map_err(|e| e.to_string())?;
@@ -699,7 +723,7 @@ pub fn get_materials(project_id: i64) -> Result<Vec<Material>, String> {
 
 #[tauri::command]
 pub fn save_material(mat: Material) -> Result<(), String> {
-    log::info!("CMD [save_material] Input: {:?}", mat);
+    log::info!("CMD [save_material] {} (project_id={})", log_target(mat.id), mat.project_id);
     let result = (|| -> Result<(), String> {
         if mat.description.trim().is_empty() {
             return Err("La descrizione del materiale non può essere vuota".to_string());
@@ -835,36 +859,36 @@ pub fn update_labor_phase(labor_ids: Vec<i64>, phase: Option<String>) -> Result<
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         {
+            // Le due statement sono preparate una sola volta e riusate per ogni
+            // id: prima venivano ricompilate a ogni iterazione del ciclo.
+            let mut stmt_find = tx.prepare(
+                "SELECT project_id, date, phase, description, vehicle, cost_center_id FROM labor WHERE id = ?"
+            ).map_err(|e| e.to_string())?;
+            let mut stmt_update = tx.prepare(
+                "UPDATE labor
+                 SET phase = ?
+                 WHERE project_id = ?
+                   AND date IS ?
+                   AND phase IS ?
+                   AND description IS ?
+                   AND vehicle IS ?
+                   AND cost_center_id IS ?"
+            ).map_err(|e| e.to_string())?;
+
             for id in &labor_ids {
-                // Find group details of this labor entry
-                let mut stmt_find = tx.prepare(
-                    "SELECT project_id, date, phase, description, vehicle, cost_center_id FROM labor WHERE id = ?"
-                ).map_err(|e| e.to_string())?;
-                
+                // Individua la riga e il gruppo di appartenenza.
                 let group_info = stmt_find.query_row([id], |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
-                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(1)?,
                         row.get::<_, Option<String>>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, Option<i64>>(5)?,
                     ))
                 });
-                
+
                 if let Ok((project_id, date, old_phase, description, vehicle, cc_id)) = group_info {
-                    // Update all matching rows in the group
-                    let mut stmt_update = tx.prepare(
-                        "UPDATE labor 
-                         SET phase = ? 
-                         WHERE project_id = ? 
-                           AND date = ? 
-                           AND phase IS ? 
-                           AND description IS ? 
-                           AND vehicle IS ? 
-                           AND cost_center_id IS ?"
-                    ).map_err(|e| e.to_string())?;
-                    
                     stmt_update.execute((
                         &phase,
                         project_id,
@@ -897,36 +921,34 @@ pub fn move_labor_cost_center(labor_ids: Vec<i64>, cost_center_id: Option<i64>) 
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         
         {
+            // Statement preparate una sola volta e riusate per ogni id.
+            let mut stmt_find = tx.prepare(
+                "SELECT project_id, date, phase, description, vehicle, cost_center_id FROM labor WHERE id = ?"
+            ).map_err(|e| e.to_string())?;
+            let mut stmt_update = tx.prepare(
+                "UPDATE labor
+                 SET cost_center_id = ?
+                 WHERE project_id = ?
+                   AND date IS ?
+                   AND phase IS ?
+                   AND description IS ?
+                   AND vehicle IS ?
+                   AND cost_center_id IS ?"
+            ).map_err(|e| e.to_string())?;
+
             for id in &labor_ids {
-                // Find group details of this labor entry
-                let mut stmt_find = tx.prepare(
-                    "SELECT project_id, date, phase, description, vehicle, cost_center_id FROM labor WHERE id = ?"
-                ).map_err(|e| e.to_string())?;
-                
                 let group_info = stmt_find.query_row([id], |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
-                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(1)?,
                         row.get::<_, Option<String>>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, Option<i64>>(5)?,
                     ))
                 });
-                
+
                 if let Ok((project_id, date, phase, description, vehicle, old_cc)) = group_info {
-                    // Update all matching rows in the group
-                    let mut stmt_update = tx.prepare(
-                        "UPDATE labor 
-                         SET cost_center_id = ? 
-                         WHERE project_id = ? 
-                           AND date = ? 
-                           AND phase IS ? 
-                           AND description IS ? 
-                           AND vehicle IS ? 
-                           AND cost_center_id IS ?"
-                    ).map_err(|e| e.to_string())?;
-                    
                     stmt_update.execute((
                         cost_center_id,
                         project_id,
@@ -975,7 +997,7 @@ pub fn get_labor(project_id: i64) -> Result<Vec<Labor>, String> {
 
 #[tauri::command]
 pub fn save_labor(labor: Labor) -> Result<(), String> {
-    log::info!("CMD [save_labor] Input: {:?}", labor);
+    log::info!("CMD [save_labor] {} (project_id={})", log_target(labor.id), labor.project_id);
     let result = (|| -> Result<(), String> {
         let t_cost = labor.travel_cost.unwrap_or(0.0);
         if labor.hours < 0.0 {
@@ -1051,7 +1073,7 @@ pub fn get_expenses(project_id: i64) -> Result<Vec<Expense>, String> {
 
 #[tauri::command]
 pub fn save_expense(expense: Expense) -> Result<(), String> {
-    log::info!("CMD [save_expense] Input: {:?}", expense);
+    log::info!("CMD [save_expense] {} (project_id={})", log_target(expense.id), expense.project_id);
     let result = (|| -> Result<(), String> {
         if expense.description.trim().is_empty() {
             return Err("La descrizione della spesa non può essere vuota".to_string());
@@ -1116,7 +1138,7 @@ pub fn get_employees() -> Result<Vec<Employee>, String> {
 
 #[tauri::command]
 pub fn save_employee(employee: Employee) -> Result<(), String> {
-    log::info!("CMD [save_employee] Input: {:?}", employee);
+    log::info!("CMD [save_employee] {}", log_target(employee.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
         if let Some(id) = employee.id {
@@ -1179,7 +1201,13 @@ pub fn get_global_settings() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub fn save_global_settings(settings: serde_json::Value) -> Result<(), String> {
-    log::info!("CMD [save_global_settings] Input: {:?}", settings);
+    // Solo i nomi delle chiavi, mai i valori: fra le impostazioni c'e' anche
+    // `telegram_bot_token`, che finirebbe in chiaro nel file di log.
+    let changed_keys: Vec<&str> = settings
+        .as_object()
+        .map(|obj| obj.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    log::info!("CMD [save_global_settings] chiavi: {:?}", changed_keys);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
         let obj = settings.as_object().ok_or("Settings must be an object")?;
@@ -1243,7 +1271,7 @@ pub fn log_frontend_error(message: String, stack: String) {
 
 #[tauri::command]
 pub fn export_database(dest_path: String) -> Result<(), String> {
-    log::info!("CMD [export_database] dest_path: {}", dest_path);
+    log::info!("CMD [export_database] destinazione: {}", log_file_name(&dest_path));
     let result = (|| -> Result<(), String> {
         use crate::db::get_db_path;
         use std::fs;
@@ -1265,7 +1293,7 @@ pub fn export_database(dest_path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn save_pdf_file(dest_path: String, content: Vec<u8>) -> Result<(), String> {
-    log::info!("CMD [save_pdf_file] dest_path: {}, size: {} bytes", dest_path, content.len());
+    log::info!("CMD [save_pdf_file] destinazione: {}, {} byte", log_file_name(&dest_path), content.len());
     let result = (|| -> Result<(), String> {
         use std::fs;
         fs::write(dest_path, content).map_err(|e| e.to_string())
@@ -1275,6 +1303,138 @@ pub fn save_pdf_file(dest_path: String, content: Vec<u8>) -> Result<(), String> 
         Err(e) => log::error!("CMD [save_pdf_file] Failed: {}", e),
     }
     result
+}
+
+// ==========================================
+// BACKUP AUTOMATICO
+// ==========================================
+
+/// Stato dei backup, per il pannello "Dati & Log".
+///
+/// Un backup che nessuno sa di avere e' meta' funzione: l'utente deve poter
+/// vedere dove sono i file e quando risale l'ultimo.
+#[tauri::command]
+pub fn get_backup_info() -> Result<serde_json::Value, String> {
+    let dir = crate::backup::backup_dir();
+    let backups = crate::backup::list_backups(&dir);
+
+    let latest = backups.first().and_then(|path| {
+        let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+        let epoch = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+
+        get_connection()
+            .and_then(|conn| {
+                conn.query_row(
+                    "SELECT strftime('%d/%m/%Y %H:%M', ?1, 'unixepoch', 'localtime')",
+                    [epoch as i64],
+                    |row| row.get::<_, String>(0),
+                )
+            })
+            .ok()
+    });
+
+    Ok(serde_json::json!({
+        "directory": dir.to_string_lossy(),
+        "count": backups.len(),
+        "keep": crate::backup::KEEP_COUNT,
+        "latest": latest,
+    }))
+}
+
+/// Crea subito un backup, senza attendere la scadenza delle 24 ore.
+#[tauri::command]
+pub fn create_backup_now() -> Result<String, String> {
+    log::info!("CMD [create_backup_now]");
+    let path = crate::backup::create_backup()?;
+    crate::backup::prune(&crate::backup::backup_dir(), crate::backup::KEEP_COUNT);
+    Ok(path.to_string_lossy().to_string())
+}
+
+// ==========================================
+// DIAGNOSTICA (TELEGRAM)
+// ==========================================
+
+/// Invia il file di log al canale di diagnostica.
+///
+/// Prima l'invio avveniva dal frontend con una `fetch` diretta alle API di
+/// Telegram, usando `import.meta.env.VITE_TELEGRAM_BOT_TOKEN`: Vite sostituisce
+/// le variabili `VITE_*` a build time, quindi il token del bot finiva in chiaro
+/// nel bundle JavaScript distribuito. Ora il token resta lato backend.
+#[tauri::command]
+pub fn send_log_to_telegram(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("CMD [send_log_to_telegram]");
+
+    let (token, chat_id) = crate::telegram::credentials()
+        .ok_or("Credenziali Telegram non configurate")?;
+
+    let log_path = crate::telegram::app_log_path(&app)
+        .ok_or("Nessun file di log trovato")?;
+
+    let caption = format!(
+        "FreschiTech - Log di diagnostica
+Invio manuale del {}",
+        chrono_now()
+    );
+
+    // `dispatch` esegue la richiesta fuori dal runtime tokio su cui Tauri
+    // invoca i comandi, dove `reqwest::blocking` andrebbe in panic.
+    crate::telegram::dispatch(move || {
+        crate::telegram::send_document(&token, &chat_id, &log_path, &caption)
+    })?
+}
+
+/// Invia il database al canale di diagnostica, **su richiesta esplicita**.
+///
+/// Il file contiene l'anagrafica completa dei clienti (P.IVA, codici fiscali,
+/// email, PEC, telefoni): per questo non viene mai allegato automaticamente ai
+/// report di errore, ma solo quando l'utente lo chiede dal pannello
+/// "Dati & Log".
+#[tauri::command]
+pub fn send_database_to_telegram() -> Result<(), String> {
+    log::info!("CMD [send_database_to_telegram]");
+
+    let (token, chat_id) = crate::telegram::credentials()
+        .ok_or("Credenziali Telegram non configurate")?;
+
+    let db_path = crate::db::get_db_path();
+    if !db_path.exists() {
+        return Err("Il file di database non esiste".to_string());
+    }
+
+    let caption = format!(
+        "FreschiTech - Database
+Invio manuale del {}",
+        chrono_now()
+    );
+
+    crate::telegram::dispatch(move || {
+        crate::telegram::send_document(&token, &chat_id, &db_path, &caption)
+    })?
+}
+
+/// Timestamp in formato ISO-8601 UTC, senza aggiungere una dipendenza da
+/// `chrono` solo per una didascalia.
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    // Delega la formattazione a SQLite, gia' presente e con supporto date.
+    get_connection()
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT strftime('%Y-%m-%d %H:%M:%S', ?1, 'unixepoch')",
+                [secs as i64],
+                |row| row.get::<_, String>(0),
+            )
+        })
+        .unwrap_or_else(|_| format!("timestamp {secs}"))
 }
 
 // ==========================================
@@ -1448,7 +1608,7 @@ pub fn get_catalog_materials(
 
 #[tauri::command]
 pub fn save_catalog_material(item: CatalogMaterial) -> Result<(), String> {
-    log::info!("CMD [save_catalog_material] Input: {:?}", item);
+    log::info!("CMD [save_catalog_material] {}", log_target(item.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
         if let Some(id) = item.id {
@@ -1810,7 +1970,7 @@ pub fn get_catalog_preview(file_path: String) -> Result<Vec<CatalogMaterial>, St
 
 #[tauri::command]
 pub fn import_catalog_materials(file_path: String, clear_existing: bool) -> Result<usize, String> {
-    log::info!("CMD [import_catalog_materials] file_path: {}, clear_existing: {}", file_path, clear_existing);
+    log::info!("CMD [import_catalog_materials] file: {}, svuota_esistenti: {}", log_file_name(&file_path), clear_existing);
     let result = (|| -> Result<usize, String> {
         let imported_items = parse_catalog_file(&file_path, None)?;
 
@@ -2023,6 +2183,18 @@ pub struct QuoteItem {
     pub markup: f64,
 }
 
+/// Converte un `f64` letto dal database in un valore JSON.
+///
+/// `serde_json::Number::from_f64` restituisce `None` per `NaN` e `±Infinity`,
+/// che una colonna REAL puo' contenere: l'`unwrap()` precedente faceva andare
+/// in panic il backend. Questi valori non sono rappresentabili in JSON, quindi
+/// li riportiamo come `null` invece di far crashare l'applicazione.
+fn json_number(value: f64) -> serde_json::Value {
+    serde_json::Number::from_f64(value)
+        .map(serde_json::Value::Number)
+        .unwrap_or(serde_json::Value::Null)
+}
+
 #[tauri::command]
 pub fn get_quotes() -> Result<Vec<serde_json::Value>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
@@ -2054,7 +2226,7 @@ pub fn get_quotes() -> Result<Vec<serde_json::Value>, String> {
 
 #[tauri::command]
 pub fn save_quote(quote: Quote, items: Vec<QuoteItem>) -> Result<i64, String> {
-    log::info!("CMD [save_quote] Quote: {:?}, Items count: {}", quote, items.len());
+    log::info!("CMD [save_quote] {} (client_id={}, {} voci)", log_target(quote.id), quote.client_id, items.len());
     let mut conn = get_connection().map_err(|e| e.to_string())?;
     
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -2126,10 +2298,15 @@ pub fn get_quote_details(quote_id: i64) -> Result<serde_json::Value, String> {
         map.insert("id".to_string(), serde_json::Value::Number(row.get::<_, i64>(0)?.into()));
         map.insert("code".to_string(), row.get::<_, Option<String>>(1)?.map_or(serde_json::Value::Null, serde_json::Value::String));
         map.insert("description".to_string(), serde_json::Value::String(row.get(2)?));
-        map.insert("unit".to_string(), serde_json::Value::String(row.get(3)?));
-        map.insert("unit_price".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(row.get(4)?).unwrap()));
-        map.insert("quantity".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(row.get(5)?).unwrap()));
-        map.insert("markup".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(row.get(6)?).unwrap()));
+        // `unit` e' nullable: leggerla come String farebbe fallire l'intera query.
+        map.insert(
+            "unit".to_string(),
+            row.get::<_, Option<String>>(3)?
+                .map_or(serde_json::Value::Null, serde_json::Value::String),
+        );
+        map.insert("unit_price".to_string(), json_number(row.get(4)?));
+        map.insert("quantity".to_string(), json_number(row.get(5)?));
+        map.insert("markup".to_string(), json_number(row.get(6)?));
         Ok(serde_json::Value::Object(map))
     }).map_err(|e| e.to_string())?;
     
@@ -2273,19 +2450,55 @@ pub struct XmlMappingRow {
     pub markup: Option<f64>,
 }
 
+/// Esito del parsing di una fattura elettronica.
+///
+/// Include il fornitore estratto dal blocco `CedentePrestatore`: prima veniva
+/// calcolato e scartato, e il frontend scriveva a listino un nome di fornitore
+/// costante, sbagliato per qualsiasi fattura non emessa da quel fornitore.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct XmlInvoiceParseResult {
+    pub supplier: String,
+    pub rows: Vec<XmlMappingRow>,
+}
+
+/// Nome usato quando la fattura non espone una denominazione del cedente.
+pub const FALLBACK_SUPPLIER: &str = "Fornitore Generico";
+
+/// Estrae la denominazione del cedente/prestatore da una fattura elettronica.
+///
+/// Le persone fisiche non hanno `Denominazione` ma `Nome` + `Cognome`.
+fn extract_supplier_name(xml_content: &str) -> String {
+    let cedente_blocks = extract_all_blocks(xml_content, "CedentePrestatore");
+    let Some(block) = cedente_blocks.first() else {
+        return FALLBACK_SUPPLIER.to_string();
+    };
+
+    if let Some(denominazione) = extract_tag(block, "Denominazione") {
+        let trimmed = denominazione.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let nome = extract_tag(block, "Nome").unwrap_or_default();
+    let cognome = extract_tag(block, "Cognome").unwrap_or_default();
+    let completo = format!("{} {}", nome.trim(), cognome.trim());
+    let completo = completo.trim();
+
+    if completo.is_empty() {
+        FALLBACK_SUPPLIER.to_string()
+    } else {
+        completo.to_string()
+    }
+}
+
 #[tauri::command]
-pub fn parse_invoice_xml(file_path: String) -> Result<Vec<XmlMappingRow>, String> {
-    log::info!("CMD [parse_invoice_xml] file_path: {}", file_path);
+pub fn parse_invoice_xml(file_path: String) -> Result<XmlInvoiceParseResult, String> {
+    log::info!("CMD [parse_invoice_xml] file: {}", log_file_name(&file_path));
     let xml_content = std::fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
     let conn = get_connection().map_err(|e| e.to_string())?;
-    
-    // Estrazione del fornitore (CedentePrestatore)
-    let cedente_blocks = extract_all_blocks(&xml_content, "CedentePrestatore");
-    let _supplier_name = if !cedente_blocks.is_empty() {
-        extract_tag(&cedente_blocks[0], "Denominazione").unwrap_or_else(|| "Fornitore Generico".to_string())
-    } else {
-        "Fornitore Generico".to_string()
-    };
+
+    let supplier = extract_supplier_name(&xml_content);
     
     let dettaglio_linee = extract_all_blocks(&xml_content, "DettaglioLinee");
     let mut mappings = Vec::new();
@@ -2400,8 +2613,11 @@ pub fn parse_invoice_xml(file_path: String) -> Result<Vec<XmlMappingRow>, String
             markup,
         });
     }
-    
-    Ok(mappings)
+
+    Ok(XmlInvoiceParseResult {
+        supplier,
+        rows: mappings,
+    })
 }
 
 #[tauri::command]
@@ -2448,3 +2664,127 @@ pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── Normalizzazione del ricarico letto dai listini ──────────────────
+
+    #[test]
+    fn il_ricarico_percentuale_viene_normalizzato_a_frazione() {
+        assert_eq!(clean_markup_f64(25.0), 0.25);
+        assert_eq!(parse_markup_str("25%"), 0.25);
+        assert_eq!(parse_markup_str("25,5"), 0.255);
+    }
+
+    #[test]
+    fn il_ricarico_gia_frazionario_resta_invariato() {
+        assert_eq!(clean_markup_f64(0.25), 0.25);
+        assert_eq!(clean_markup_f64(1.0), 1.0);
+    }
+
+    #[test]
+    fn il_ricarico_negativo_viene_azzerato() {
+        assert_eq!(clean_markup_f64(-5.0), 0.0);
+    }
+
+    #[test]
+    fn un_ricarico_non_numerico_vale_zero() {
+        assert_eq!(parse_markup_str("n/d"), 0.0);
+        assert_eq!(parse_markup_str(""), 0.0);
+    }
+
+    // ─── Parsing CSV ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_csv_line_separa_e_ripulisce_i_campi() {
+        let cells = parse_csv_line("COD1; Cavo 3G2.5 ;m;1,72", ';');
+        assert_eq!(cells, vec!["COD1", "Cavo 3G2.5", "m", "1,72"]);
+    }
+
+    #[test]
+    fn parse_csv_line_ignora_il_separatore_dentro_le_virgolette() {
+        let cells = parse_csv_line(r#"COD1;"Cavo 3G2,5 mm";m"#, ';');
+        assert_eq!(cells, vec!["COD1", "Cavo 3G2,5 mm", "m"]);
+    }
+
+    #[test]
+    fn parse_csv_line_produce_un_campo_vuoto_per_le_colonne_mancanti() {
+        let cells = parse_csv_line("COD1;;m", ';');
+        assert_eq!(cells, vec!["COD1", "", "m"]);
+    }
+
+    // ─── Parsing XML fattura elettronica ─────────────────────────────────
+
+    #[test]
+    fn extract_tag_ignora_il_prefisso_di_namespace() {
+        let xml = "<ns2:Descrizione>Cavo FG16</ns2:Descrizione>";
+        assert_eq!(extract_tag(xml, "Descrizione"), Some("Cavo FG16".to_string()));
+    }
+
+    #[test]
+    fn extract_all_blocks_restituisce_ogni_occorrenza() {
+        let xml = "<DettaglioLinee><A>1</A></DettaglioLinee>                   <DettaglioLinee><A>2</A></DettaglioLinee>";
+        let blocks = extract_all_blocks(xml, "DettaglioLinee");
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(extract_tag(&blocks[1], "A"), Some("2".to_string()));
+    }
+
+    #[test]
+    fn il_fornitore_viene_letto_dalla_denominazione() {
+        let xml = "<CedentePrestatore><DatiAnagrafici><Anagrafica>                   <Denominazione>MARCHIOL S.P.A.</Denominazione>                   </Anagrafica></DatiAnagrafici></CedentePrestatore>";
+        assert_eq!(extract_supplier_name(xml), "MARCHIOL S.P.A.");
+    }
+
+    #[test]
+    fn il_fornitore_persona_fisica_usa_nome_e_cognome() {
+        let xml = "<CedentePrestatore><DatiAnagrafici><Anagrafica>                   <Nome>Mario</Nome><Cognome>Rossi</Cognome>                   </Anagrafica></DatiAnagrafici></CedentePrestatore>";
+        assert_eq!(extract_supplier_name(xml), "Mario Rossi");
+    }
+
+    #[test]
+    fn senza_cedente_si_usa_il_fornitore_generico() {
+        assert_eq!(extract_supplier_name("<FatturaElettronica/>"), FALLBACK_SUPPLIER);
+    }
+
+    // ─── Log privi di dati personali ─────────────────────────────────────
+
+    #[test]
+    fn log_target_distingue_inserimento_e_aggiornamento() {
+        assert_eq!(log_target(None), "inserimento");
+        assert_eq!(log_target(Some(42)), "aggiornamento id=42");
+    }
+
+    #[test]
+    fn log_file_name_scarta_il_percorso_windows() {
+        // Il percorso contiene il nome utente, che e' a sua volta un dato personale.
+        assert_eq!(
+            log_file_name(r"C:\Users\mario.rossi\Documenti\listino.xlsx"),
+            "listino.xlsx"
+        );
+    }
+
+    #[test]
+    fn log_file_name_scarta_il_percorso_unix() {
+        assert_eq!(log_file_name("/home/mario/listino.csv"), "listino.csv");
+    }
+
+    #[test]
+    fn log_file_name_lascia_intatto_un_nome_gia_nudo() {
+        assert_eq!(log_file_name("listino.csv"), "listino.csv");
+    }
+
+    // ─── Conversione numerica verso JSON ─────────────────────────────────
+
+    #[test]
+    fn json_number_converte_i_valori_finiti() {
+        assert_eq!(json_number(12.5), serde_json::json!(12.5));
+    }
+
+    #[test]
+    fn json_number_non_va_in_panic_su_nan_e_infinito() {
+        assert_eq!(json_number(f64::NAN), serde_json::Value::Null);
+        assert_eq!(json_number(f64::INFINITY), serde_json::Value::Null);
+    }
+}

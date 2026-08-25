@@ -164,7 +164,7 @@ const Clients = ({ onOpenProject }) => {
                 {client.type === 'company' ? <Building2 size={32} /> : <User size={32} />}
               </div>
               <div>
-                <span className="inline-block text-[0.65rem] font-black tracking-widest uppercase bg-accent/10 text-accent px-3 py-1 rounded-full mb-1">
+                <span className="inline-block text-[0.75rem] font-black tracking-widest uppercase bg-accent/10 text-accent px-3 py-1 rounded-full mb-1">
                   {client.type === 'company' ? 'Azienda' : 'Privato'}
                 </span>
                 <h3 className="text-xl font-bold text-slate-800">{client.name}</h3>
@@ -200,7 +200,7 @@ const Clients = ({ onOpenProject }) => {
 
             {/* Riepilogo Economico Commesse */}
             <div className="space-y-4 bg-white/35 backdrop-blur-sm p-5 rounded-3xl border border-white/40 shadow-sm">
-              <h4 className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Riepilogo Totali</h4>
+              <h4 className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Riepilogo Totali</h4>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[0.7rem] font-bold uppercase tracking-wider text-slate-500">Tot. Preventivi</span>
@@ -241,7 +241,7 @@ const Clients = ({ onOpenProject }) => {
                   <Briefcase size={22} className="text-accent" />
                   Commesse Associate ({clientProjects.length})
                 </h2>
-                <p className="text-[0.65rem] font-bold uppercase tracking-wider text-slate-400 mt-1">Elenco dei progetti di questo cliente</p>
+                <p className="text-[0.75rem] font-bold uppercase tracking-wider text-slate-400 mt-1">Elenco dei progetti di questo cliente</p>
               </div>
               <div className="relative group shrink-0">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-accent transition-colors" size={14} />
@@ -271,7 +271,7 @@ const Clients = ({ onOpenProject }) => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400">#{project.code || project.id}</span>
-                        <span className={`inline-block text-[0.6rem] font-black tracking-wider uppercase px-2 py-0.5 rounded-full ${
+                        <span className={`inline-block text-[0.72rem] font-black tracking-wider uppercase px-2 py-0.5 rounded-full ${
                           project.status === 'completed' 
                             ? 'bg-emerald-50 text-emerald-600' 
                             : project.status === 'in_progress'
@@ -289,11 +289,11 @@ const Clients = ({ onOpenProject }) => {
                       {/* Budget and Profit info */}
                       <div className="flex items-center gap-6 mt-3 text-xs text-slate-500 font-semibold">
                         <div>
-                          <span className="text-slate-400 font-bold uppercase tracking-wider text-[0.6rem]">Preventivo: </span>
+                          <span className="text-slate-400 font-bold uppercase tracking-wider text-[0.72rem]">Preventivo: </span>
                           <span className="text-slate-700">€ {formatCurrency(project.budget)}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 font-bold uppercase tracking-wider text-[0.6rem]">Utile Previsto: </span>
+                          <span className="text-slate-400 font-bold uppercase tracking-wider text-[0.72rem]">Utile Previsto: </span>
                           <span className={Number(project.utile_previsto || 0) >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
                             € {formatCurrency(project.utile_previsto)}
                           </span>

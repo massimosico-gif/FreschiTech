@@ -102,7 +102,7 @@ const AutocompleteInput = ({ label, icon: Icon, value, onChange, name, placehold
         <div className="absolute left-0 bottom-full mb-2 w-64 bg-white/90 backdrop-blur-xl border border-white/60 rounded-2xl shadow-2xl p-2 z-50 animate-premium-in">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 mb-1">
             <Tag size={12} className="text-[#8bc53f]" />
-            <span className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">Suggerimenti Tag</span>
+            <span className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400">Suggerimenti Tag</span>
           </div>
           <div className="max-h-48 overflow-y-auto no-scrollbar">
             {suggestions.map((s, idx) => (
@@ -118,7 +118,7 @@ const AutocompleteInput = ({ label, icon: Icon, value, onChange, name, placehold
                   <code className={`text-[0.75rem] font-black ${idx === selectedIndex ? 'text-white' : 'text-[#8bc53f]'}`}>
                     {s.tag}
                   </code>
-                  <span className={`text-[0.55rem] font-bold uppercase tracking-tight ${idx === selectedIndex ? 'text-white/80' : 'text-slate-400'}`}>
+                  <span className={`text-[0.7rem] font-bold uppercase tracking-tight ${idx === selectedIndex ? 'text-white/80' : 'text-slate-400'}`}>
                     {s.label}
                   </span>
                 </div>

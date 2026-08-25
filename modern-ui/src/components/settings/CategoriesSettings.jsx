@@ -28,7 +28,7 @@ const ListManager = ({ title, icon: Icon, items, onAdd, onRemove, inputVal, setI
           </div>
           <div>
             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{title}</h3>
-            <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Configurazione parametri</p>
+            <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Configurazione parametri</p>
           </div>
         </div>
 
@@ -55,7 +55,7 @@ const ListManager = ({ title, icon: Icon, items, onAdd, onRemove, inputVal, setI
               key={idx} 
               className="flex items-center gap-2 bg-accent border border-accent px-4 py-2 rounded-xl group/tag hover:bg-white transition-all duration-300 animate-fade-in"
             >
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-white group-hover/tag:text-accent transition-colors duration-300">{item}</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest text-white group-hover/tag:text-accent transition-colors duration-300">{item}</span>
               <button 
                 onClick={() => onRemove(item)}
                 className="text-white/70 hover:text-white group-hover/tag:text-accent/70 group-hover/tag:hover:text-accent transition-colors duration-300"
@@ -65,11 +65,11 @@ const ListManager = ({ title, icon: Icon, items, onAdd, onRemove, inputVal, setI
             </div>
           )) : items.length > 0 ? (
             <div className="py-4 w-full text-center">
-              <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.2em] italic">Nessun elemento corrispondente</p>
+              <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.2em] italic">Nessun elemento corrispondente</p>
             </div>
           ) : (
             <div className="py-8 w-full text-center">
-              <p className="text-[0.6rem] font-black text-slate-300 uppercase tracking-[0.2em] italic">Nessun elemento definito</p>
+              <p className="text-[0.72rem] font-black text-slate-300 uppercase tracking-[0.2em] italic">Nessun elemento definito</p>
             </div>
           )}
         </div>
@@ -167,7 +167,7 @@ const CategoriesSettings = () => {
           status.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-50 text-red-600 border border-red-100'
         }`}>
           {status.type === 'success' ? <CheckCircle2 size={20} className="text-green-400" /> : <AlertCircle size={20} />}
-          <span className="text-[0.65rem] font-black uppercase tracking-widest">{status.message}</span>
+          <span className="text-[0.75rem] font-black uppercase tracking-widest">{status.message}</span>
         </div>
       )}
 

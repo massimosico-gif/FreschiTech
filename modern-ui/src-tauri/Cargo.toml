@@ -23,6 +23,11 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2.1.0"
 tauri-plugin-updater = "2"
-rusqlite = { version = "0.31", features = ["bundled"] }
+# `backup`: API di backup online di SQLite, che copia il database in modo
+# consistente anche se qualcuno sta scrivendo (a differenza di fs::copy).
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 directories = "5.0"
 calamine = "0.24"
+# Usato per la diagnostica su Telegram: sostituisce le chiamate al binario
+# esterno `curl`, che non e' garantito su Windows.
+reqwest = { version = "0.13", features = ["blocking", "multipart", "json"] }

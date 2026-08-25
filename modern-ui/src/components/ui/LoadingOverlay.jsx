@@ -10,8 +10,8 @@ const LoadingOverlay = ({ message = 'Operazione in corso...' }) => {
           <Loader2 className="absolute inset-0 text-[#8bc53f] animate-spin" size={64} />
         </div>
         <div className="text-center space-y-1">
-          <p className="text-[0.65rem] font-black uppercase tracking-[0.3em] text-[#8bc53f]">{message}</p>
-          <p className="text-[0.55rem] font-bold text-slate-400 uppercase tracking-widest">Attendere prego</p>
+          <p className="text-[0.75rem] font-black uppercase tracking-[0.3em] text-[#8bc53f]">{message}</p>
+          <p className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-widest">Attendere prego</p>
         </div>
       </div>
     </div>

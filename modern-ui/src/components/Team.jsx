@@ -155,7 +155,7 @@ const Team = () => {
       >
         <form onSubmit={handleSave} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Nome e Cognome</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400 ml-1">Nome e Cognome</label>
             <input 
               required
               name="name"
@@ -166,7 +166,7 @@ const Team = () => {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Orario Standard (€)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Orario Standard (€)</label>
             <input 
               required
               type="number"

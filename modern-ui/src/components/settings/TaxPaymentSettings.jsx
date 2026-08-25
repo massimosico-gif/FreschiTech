@@ -124,7 +124,7 @@ const TaxPaymentSettings = () => {
               <p className="text-xs font-bold text-slate-400">Gestisci le aliquote per la ritenuta d'acconto</p>
             </div>
           </div>
-          <button onClick={handleAddTaxRate} className="flex items-center gap-2 px-6 h-11 bg-orange-500 text-white rounded-xl text-[0.65rem] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20">
+          <button onClick={handleAddTaxRate} className="flex items-center gap-2 px-6 h-11 bg-orange-500 text-white rounded-xl text-[0.75rem] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20">
             <Plus size={16} /> Aggiungi Aliquota
           </button>
         </div>
@@ -163,7 +163,7 @@ const TaxPaymentSettings = () => {
               <p className="text-xs font-bold text-slate-400">Gestisci i termini di pagamento e le scadenze predefinite</p>
             </div>
           </div>
-          <button onClick={handleAddPaymentCondition} className="flex items-center gap-2 px-6 h-11 bg-blue-600 text-white rounded-xl text-[0.65rem] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
+          <button onClick={handleAddPaymentCondition} className="flex items-center gap-2 px-6 h-11 bg-blue-600 text-white rounded-xl text-[0.75rem] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
             <Plus size={16} /> Nuova Condizione
           </button>
         </div>

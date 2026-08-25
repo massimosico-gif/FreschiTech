@@ -52,7 +52,7 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
           {selectedValues.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
                {selectedLabels.map(label => (
-                 <span key={label} className={`bg-accent/10 text-accent px-2 py-0.5 rounded-lg text-[0.6rem] font-black uppercase tracking-tight`}>
+                 <span key={label} className={`bg-accent/10 text-accent px-2 py-0.5 rounded-lg text-[0.72rem] font-black uppercase tracking-tight`}>
                    {label}
                  </span>
                ))}
@@ -78,7 +78,7 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className={`w-full bg-slate-50 border-none text-slate-700 font-bold focus:ring-0 ${
-                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.65rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
+                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.75rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
               }`}
             />
           </div>
@@ -102,7 +102,7 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
               })
             ) : (
               <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
-                <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessun operatore trovato</p>
+                <p className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Nessun operatore trovato</p>
                 {onAddNew && (
                   <button
                     type="button"
@@ -111,7 +111,7 @@ const MultiSelect = ({ options, selectedValues, onChange, placeholder, icon: Ico
                       setIsOpen(false)
                       setSearch('')
                     }}
-                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.6rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                    className="px-4 py-2.5 bg-accent text-white rounded-xl text-[0.72rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
                   >
                     {search ? `+ Aggiungi "${search}"` : '+ Aggiungi Nuovo Operatore'}
                   </button>

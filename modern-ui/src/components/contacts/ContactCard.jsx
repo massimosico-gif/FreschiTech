@@ -36,7 +36,7 @@ const ContactCard = ({ contact, onEdit, onDelete }) => {
           <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-50 group-hover:border-accent/30 transition-all">
             {getTypeIcon()}
           </div>
-          <span className="text-[0.6rem] font-black uppercase tracking-[0.2em] text-slate-400">{getTypeLabel()}</span>
+          <span className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-slate-400">{getTypeLabel()}</span>
         </div>
         
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
@@ -60,7 +60,7 @@ const ContactCard = ({ contact, onEdit, onDelete }) => {
         <h3 className="text-xl font-black text-slate-800 mb-1 leading-tight group-hover:text-accent transition-colors">
           {contact.name}
         </h3>
-        <div className="flex items-center gap-2 text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">
+        <div className="flex items-center gap-2 text-[0.75rem] font-bold text-slate-400 uppercase tracking-widest">
           <span>{contact.vat_id || contact.tax_code || 'Nessun identificativo'}</span>
         </div>
       </div>
@@ -88,7 +88,7 @@ const ContactCard = ({ contact, onEdit, onDelete }) => {
               </span>
             </div>
             {contact.distance && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-accent/10 rounded-lg text-accent text-[0.6rem] font-black">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-accent/10 rounded-lg text-accent text-[0.72rem] font-black">
                 <Car size={10} />
                 <span>{contact.distance} km</span>
               </div>
@@ -99,7 +99,7 @@ const ContactCard = ({ contact, onEdit, onDelete }) => {
         <div className="flex items-center justify-between pt-4 border-t border-white/50">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-accent rounded-full animate-pulse"></div>
-            <span className="text-[0.6rem] font-black uppercase tracking-[0.2em] text-accent">Attivo</span>
+            <span className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-accent">Attivo</span>
           </div>
           <button className="text-accent hover:text-accent/80 transition-colors">
             <ExternalLink size={16} />

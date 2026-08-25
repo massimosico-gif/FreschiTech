@@ -194,13 +194,13 @@ const EmailPreviewModal = ({ isOpen, onClose, invoice }) => {
               status.type === 'success' ? 'bg-[#8bc53f]/10 text-[#8bc53f] border border-[#8bc53f]/20' : 'bg-red-50 text-red-500 border border-red-100'
             }`}>
               {status.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-              <span className="text-[0.65rem] font-black uppercase tracking-widest">{status.message}</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest">{status.message}</span>
             </div>
           )}
 
           {/* Template Selector */}
           <div className="space-y-3">
-            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
               <Tag size={12} /> Seleziona Modello
             </label>
             <div className="flex p-1 bg-slate-100 rounded-2xl w-full relative overflow-hidden h-[46px]">
@@ -223,7 +223,7 @@ const EmailPreviewModal = ({ isOpen, onClose, invoice }) => {
                 <button
                   key={t.id}
                   onClick={() => handleTemplateChange(t.id)}
-                  className={`relative z-10 flex-1 flex items-center justify-center text-[0.6rem] font-black uppercase tracking-widest transition-colors duration-500 ${
+                  className={`relative z-10 flex-1 flex items-center justify-center text-[0.72rem] font-black uppercase tracking-widest transition-colors duration-500 ${
                     activeTemplate === t.id ? 'text-[#0f172a]' : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
@@ -249,7 +249,7 @@ const EmailPreviewModal = ({ isOpen, onClose, invoice }) => {
           />
 
           <div className="space-y-2">
-            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
               <MessageSquare size={12} /> Testo della Mail
             </label>
             <textarea 
@@ -266,7 +266,7 @@ const EmailPreviewModal = ({ isOpen, onClose, invoice }) => {
               <Paperclip size={16} />
             </div>
             <div className="flex-1">
-              <div className="text-[0.65rem] font-black text-[#8bc53f] uppercase tracking-widest">Allegato Automatico</div>
+              <div className="text-[0.75rem] font-black text-[#8bc53f] uppercase tracking-widest">Allegato Automatico</div>
               <div className="text-xs font-bold text-slate-600">Fattura_n_{invoice?.number || '---'}.pdf</div>
             </div>
           </div>

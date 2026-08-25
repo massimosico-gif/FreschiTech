@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as saveFileDialog } from '@tauri-apps/plugin-dialog'
 import { 
@@ -7,20 +7,52 @@ import {
   Send, 
   CheckCircle2, 
   AlertCircle, 
-  Loader2
+  Loader2,
+  ShieldAlert,
+  History,
+  FolderClock
 } from 'lucide-react'
 import Card from '../ui/Card'
+import ConfirmModal from '../ui/ConfirmModal'
 
-const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
-const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
+// Il token del bot NON viene piu' letto qui: Vite sostituisce le variabili
+// `VITE_*` a build time, quindi finiva in chiaro nel bundle JavaScript
+// distribuito. L'invio e' ora un comando del backend, che tiene il token
+// lato Rust.
 
 const DbBackupSettings = () => {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState({ type: '', message: '' })
+  const [isConfirmSendDbOpen, setIsConfirmSendDbOpen] = useState(false)
+  const [backupInfo, setBackupInfo] = useState(null)
 
   const showStatus = (type, message) => {
     setStatus({ type, message })
     setTimeout(() => setStatus({ type: '', message: '' }), 3500)
+  }
+
+  const loadBackupInfo = () => {
+    invoke('get_backup_info')
+      .then(setBackupInfo)
+      .catch(err => console.error('Errore lettura informazioni backup:', err))
+  }
+
+  useEffect(() => {
+    loadBackupInfo()
+  }, [])
+
+  const handleBackupNow = async () => {
+    setLoading(true)
+    try {
+      await invoke('create_backup_now')
+      showStatus('success', 'Backup creato con successo!')
+      loadBackupInfo()
+    } catch (err) {
+      console.error(err)
+      showStatus('error', `Errore backup: ${err}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleExportDatabase = async () => {
@@ -47,36 +79,24 @@ const DbBackupSettings = () => {
   }
 
   const handleSendLogToTelegram = async () => {
-    if (!TELEGRAM_CHAT_ID || !TELEGRAM_BOT_TOKEN) {
-      showStatus('error', 'Credenziali Telegram non configurate nel file .env')
-      return
-    }
-
     setLoading(true)
     try {
-      // 1. Read log content from backend
-      const logContent = await invoke('read_app_log')
-      
-      // 2. Create blob file for upload
-      const blob = new Blob([logContent], { type: 'text/plain' })
-      const formData = new FormData()
-      formData.append('chat_id', TELEGRAM_CHAT_ID)
-      formData.append('document', blob, 'freschitech_app.log')
-      formData.append('caption', `FreschiTech - Log di diagnostica\nData: ${new Date().toLocaleString()}`)
+      await invoke('send_log_to_telegram')
+      showStatus('success', 'Log inviato con successo a Telegram!')
+    } catch (err) {
+      console.error(err)
+      showStatus('error', `Errore durante l'invio: ${err}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      // 3. Send file to Telegram using Bot API
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      })
-
-      const resData = await response.json()
-      if (response.ok && resData.ok) {
-        showStatus('success', 'Log inviato con successo a Telegram!')
-      } else {
-        const errorMsg = resData.description || 'Risposta non valida dalle API Telegram'
-        showStatus('error', `Invio fallito: ${errorMsg}`)
-      }
+  const handleSendDatabaseToTelegram = async () => {
+    setIsConfirmSendDbOpen(false)
+    setLoading(true)
+    try {
+      await invoke('send_database_to_telegram')
+      showStatus('success', 'Database inviato con successo a Telegram!')
     } catch (err) {
       console.error(err)
       showStatus('error', `Errore durante l'invio: ${err}`)
@@ -93,7 +113,7 @@ const DbBackupSettings = () => {
           status.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-50 text-red-600 border border-red-100'
         }`}>
           {status.type === 'success' ? <CheckCircle2 size={20} className="text-green-400" /> : <AlertCircle size={20} />}
-          <span className="text-[0.65rem] font-black uppercase tracking-widest">{status.message}</span>
+          <span className="text-[0.75rem] font-black uppercase tracking-widest">{status.message}</span>
         </div>
       )}
 
@@ -104,9 +124,66 @@ const DbBackupSettings = () => {
         </div>
         <div>
           <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Dati & Log Diagnostici</h3>
-          <p className="text-[0.65rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Esportazione database e telemetria telegram</p>
+          <p className="text-[0.75rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Esportazione database e telemetria telegram</p>
         </div>
       </div>
+
+      {/* CARD 0: BACKUP AUTOMATICI */}
+      <Card hoverEffect={true} className="p-0 overflow-hidden">
+        <div className="p-8 space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-slate-50 rounded-[1.5rem] text-emerald-500 shadow-sm">
+              <FolderClock size={24} />
+            </div>
+            <div>
+              <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Backup Automatici</h4>
+              <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Copia giornaliera con rotazione</p>
+            </div>
+          </div>
+
+          <p className="text-xs font-bold text-slate-500 leading-relaxed">
+            All&apos;avvio dell&apos;applicazione, se l&apos;ultimo backup ha più di 24 ore, ne viene creato
+            uno nuovo in automatico. Vengono conservate le {backupInfo?.keep ?? 7} copie più recenti; le più vecchie
+            vengono eliminate.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-[0.2em]">Ultimo backup</p>
+              <p className="text-sm font-black text-slate-800 mt-1 flex items-center gap-2">
+                <History size={14} className="text-emerald-500 shrink-0" />
+                {backupInfo?.latest || 'Nessuno'}
+              </p>
+            </div>
+            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+              <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-[0.2em]">Copie conservate</p>
+              <p className="text-sm font-black text-slate-800 mt-1">
+                {backupInfo ? `${backupInfo.count} di ${backupInfo.keep}` : '—'}
+              </p>
+            </div>
+            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100 min-w-0">
+              <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-[0.2em]">Cartella</p>
+              <p
+                className="text-[0.75rem] font-bold text-slate-600 mt-1 truncate"
+                title={backupInfo?.directory}
+              >
+                {backupInfo?.directory || '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={handleBackupNow}
+              disabled={loading}
+              className="w-full md:w-auto flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white py-4 px-8 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest shadow-xl shadow-emerald-600/10 hover:shadow-emerald-600/20 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <FolderClock size={16} />}
+              Crea Backup Ora
+            </button>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* CARD 1: DATABASE EXPORT */}
@@ -119,7 +196,7 @@ const DbBackupSettings = () => {
                 </div>
                 <div>
                   <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Esportazione Database</h4>
-                  <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Backup locale dei dati</p>
+                  <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Backup locale dei dati</p>
                 </div>
               </div>
 
@@ -156,7 +233,7 @@ const DbBackupSettings = () => {
                 </div>
                 <div>
                   <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Invia Log a Telegram</h4>
-                  <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Supporto e Diagnostica</p>
+                  <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Supporto e Diagnostica</p>
                 </div>
               </div>
 
@@ -182,7 +259,55 @@ const DbBackupSettings = () => {
             </div>
           </div>
         </Card>
+
+        {/* CARD 3: SEND DATABASE TO TELEGRAM (AZIONE ESPLICITA) */}
+        <Card hoverEffect={true} className="p-0 overflow-hidden h-full lg:col-span-2">
+          <div className="p-8 space-y-6 flex flex-col justify-between h-full">
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="p-4 bg-slate-50 rounded-[1.5rem] text-amber-500 shadow-sm">
+                  <ShieldAlert size={24} />
+                </div>
+                <div>
+                  <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Invia Database a Telegram</h4>
+                  <p className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Solo su richiesta dell'assistenza</p>
+                </div>
+              </div>
+
+              <p className="text-xs font-bold text-slate-500 leading-relaxed">
+                Invia una copia completa del database allo sviluppatore. Usa questa funzione
+                <strong className="text-slate-700"> solo se ti viene espressamente richiesto</strong>: il file contiene
+                l'anagrafica completa dei tuoi clienti, inclusi partite IVA, codici fiscali, indirizzi email, PEC e numeri di telefono.
+                Per questo motivo il database non viene mai inviato automaticamente insieme ai report di errore.
+              </p>
+            </div>
+
+            <div className="pt-6 border-t border-slate-50">
+              <button
+                onClick={() => setIsConfirmSendDbOpen(true)}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest shadow-xl shadow-amber-500/10 hover:shadow-amber-500/20 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                {loading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <ShieldAlert size={16} />
+                )}
+                Invia Database Ora
+              </button>
+            </div>
+          </div>
+        </Card>
       </div>
+
+      <ConfirmModal
+        isOpen={isConfirmSendDbOpen}
+        onClose={() => setIsConfirmSendDbOpen(false)}
+        onConfirm={handleSendDatabaseToTelegram}
+        title="Inviare il database allo sviluppatore?"
+        message="Il file contiene l'anagrafica completa dei tuoi clienti (partite IVA, codici fiscali, email, PEC, telefoni). Procedi solo se l'assistenza te lo ha richiesto esplicitamente."
+        confirmText="Invia Database"
+      />
     </div>
   )
 }
