@@ -355,10 +355,20 @@ class Api:
         with open(t_path, 'w') as f: json.dump(tconf, f, indent=2)
 
     def _find_installer(self, version):
-        for sub in ["msi", "nsis"]:
+        """Individua l'installer prodotto dalla build.
+
+        Il glob deve restare ancorato all'estensione dell'installer. Con un
+        generico `*.*` finivano nella selezione anche i file .sig di una firma
+        precedente: essendo piu' recenti dell'installer vincevano
+        l'ordinamento per data di modifica e venivano pubblicati al loro
+        posto, con il risultato che l'updater proponeva ai client un file da
+        pochi centinaia di byte al posto del programma.
+        """
+        for sub, ext in (("msi", ".msi"), ("nsis", ".exe")):
             path = os.path.join(PROJECT_DIR, "src-tauri", "target", "release", "bundle", sub)
             if not os.path.exists(path): continue
-            files = glob.glob(os.path.join(path, f"*{version}*.*"))
+            files = [f for f in glob.glob(os.path.join(path, f"*{version}*{ext}"))
+                     if f.lower().endswith(ext)]
             if files: return sorted(files, key=os.path.getmtime, reverse=True)[0]
         return None
 
