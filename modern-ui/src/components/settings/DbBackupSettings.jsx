@@ -11,8 +11,19 @@ import {
 } from 'lucide-react'
 import Card from '../ui/Card'
 
-const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
-const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
+/*
+  PERCHE' IL TOKEN TELEGRAM NON STA PIU' QUI
+  ---------------------------------------------------------------------------
+  Prima questo file leggeva `import.meta.env.VITE_TELEGRAM_BOT_TOKEN` e
+  chiamava le API di Telegram direttamente dal browser. Vite sostituisce quelle
+  variabili a build time: il token finiva in chiaro dentro il bundle
+  JavaScript, leggibile da chiunque aprisse l'applicazione.
+
+  Ora l'invio passa dal comando `send_logs_to_developer` di tecno-core, che
+  tiene le credenziali nel backend (variabile d'ambiente di build oppure
+  ~/.freschitech/diagnostics.json) e allega SOLO il file di log — mai il
+  database.
+*/
 
 const DbBackupSettings = () => {
   const [loading, setLoading] = useState(false)
@@ -47,39 +58,17 @@ const DbBackupSettings = () => {
   }
 
   const handleSendLogToTelegram = async () => {
-    if (!TELEGRAM_CHAT_ID || !TELEGRAM_BOT_TOKEN) {
-      showStatus('error', 'Credenziali Telegram non configurate nel file .env')
-      return
-    }
-
     setLoading(true)
     try {
-      // 1. Read log content from backend
-      const logContent = await invoke('read_app_log')
-      
-      // 2. Create blob file for upload
-      const blob = new Blob([logContent], { type: 'text/plain' })
-      const formData = new FormData()
-      formData.append('chat_id', TELEGRAM_CHAT_ID)
-      formData.append('document', blob, 'freschitech_app.log')
-      formData.append('caption', `FreschiTech - Log di diagnostica\nData: ${new Date().toLocaleString()}`)
-
-      // 3. Send file to Telegram using Bot API
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
-        method: 'POST',
-        body: formData
-      })
-
-      const resData = await response.json()
-      if (response.ok && resData.ok) {
-        showStatus('success', 'Log inviato con successo a Telegram!')
-      } else {
-        const errorMsg = resData.description || 'Risposta non valida dalle API Telegram'
-        showStatus('error', `Invio fallito: ${errorMsg}`)
-      }
+      // Il backend sceglie il file di log corrente (il .log piu' recente nella
+      // cartella di log dell'applicazione: il nome dipende dal productName e
+      // non va scritto a mano) e lo allega con le informazioni di ambiente.
+      // Se le credenziali non sono configurate restituisce un errore con le
+      // istruzioni, che mostriamo cosi' com'e'.
+      await invoke('send_logs_to_developer')
+      showStatus('success', "Segnalazione inviata all'assistenza.")
     } catch (err) {
-      console.error(err)
-      showStatus('error', `Errore durante l'invio: ${err}`)
+      showStatus('error', String(err))
     } finally {
       setLoading(false)
     }

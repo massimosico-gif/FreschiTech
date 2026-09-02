@@ -3,8 +3,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { Database, Download, AlertTriangle, Loader2, Save, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import FormInput from '../ui/FormInput'
+import { useToast } from '../../hooks/useFeedback'
+import { useConfirm } from '../../hooks/useFeedback'
 
 const MaintenanceSettings = () => {
+  const confirm = useConfirm()
+  const toast = useToast()
   const [dbPath, setDbPath] = useState('')
   const [newDbPath, setNewDbPath] = useState('')
   const [loading, setLoading] = useState(true)
@@ -32,7 +36,7 @@ const MaintenanceSettings = () => {
     try {
       const path = await invoke('backup_database')
       setStatus({ type: 'success', message: `Backup creato con successo!` })
-      alert(`Backup creato in:\n${path}`)
+      toast.error(`Backup creato in:\n${path}`)
     } catch (err) {
       setStatus({ type: 'error', message: 'Errore backup: ' + err })
     } finally {
@@ -72,7 +76,15 @@ const MaintenanceSettings = () => {
   }
 
   const handleSaveDbPath = async () => {
-    if (!window.confirm("Cambiando il percorso del database, l'applicazione si collegherà al nuovo file selezionato.\n\nATTENZIONE: Se il file non esiste, verrà creato un nuovo database vuoto. Se vuoi spostare i tuoi dati, devi copiare manualmente il file .db nella nuova posizione prima di applicare il cambiamento.\n\nContinuare?")) return
+    if (!(await confirm({
+      title: 'Cambiare il percorso del database?',
+      message:
+        "L'applicazione si collegherà al file selezionato. Se il file non esiste ne verrà " +
+        'creato uno nuovo, vuoto: per portare con te i dati devi prima copiare a mano il ' +
+        'file .db nella nuova posizione.',
+      confirmLabel: 'Cambia percorso',
+      type: 'warning',
+    }))) return
     
     setSaving(true)
     try {
@@ -88,7 +100,12 @@ const MaintenanceSettings = () => {
   }
 
   const handleResetDbPath = async () => {
-    if (!window.confirm("Ripristinare il percorso predefinito in Documents/TecnoRilievi?")) return
+    if (!(await confirm({
+      title: 'Ripristinare il percorso predefinito?',
+      message: 'Il database tornerà a essere letto dalla posizione originale di FreschiTech.',
+      confirmLabel: 'Ripristina',
+      type: 'warning',
+    }))) return
     
     setSaving(true)
     try {

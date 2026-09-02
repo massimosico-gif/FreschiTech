@@ -28,8 +28,10 @@ import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
 import Select from './ui/Select'
 import EditClientDrawer from './EditClientDrawer'
+import { useToast } from '../hooks/useFeedback'
 
 const Quotes = () => {
+  const toast = useToast()
   const [quotes, setQuotes] = useState([])
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -445,14 +447,14 @@ const Quotes = () => {
       }
     } catch (err) {
       console.error("Errore salvataggio intestazione preventivo:", err)
-      alert("Impossibile salvare l'intestazione: " + err)
+      toast.error("Impossibile salvare l'intestazione: " + err)
     }
   }
 
   // Save current quote items (triggered from detail view)
   const handleSaveItems = async () => {
     if (!quoteMeta.client_id || !quoteMeta.title.trim() || !quoteMeta.created_at) {
-      alert("Campi obbligatori mancanti nell'intestazione.")
+      toast.error("Campi obbligatori mancanti nell'intestazione.")
       return
     }
 
@@ -473,10 +475,10 @@ const Quotes = () => {
       const details = await invoke('get_quote_details', { quoteId: quoteMeta.id })
       setQuoteItems(details.items || [])
       
-      alert("Preventivo salvato con successo!")
+      toast.error("Preventivo salvato con successo!")
     } catch (err) {
       console.error("Errore salvataggio preventivo:", err)
-      alert("Errore nel salvataggio del preventivo: " + err)
+      toast.error("Errore nel salvataggio del preventivo: " + err)
     }
   }
 
@@ -514,7 +516,7 @@ const Quotes = () => {
       setIsEditorOpen(true)
     } catch (err) {
       console.error("Errore caricamento dettagli preventivo:", err)
-      alert("Impossibile caricare i dettagli: " + err)
+      toast.error("Impossibile caricare i dettagli: " + err)
     }
   }
 
@@ -538,7 +540,7 @@ const Quotes = () => {
       setViewMode('detail')
     } catch (err) {
       console.error("Errore caricamento preventivo per dettaglio:", err)
-      alert("Impossibile caricare il dettaglio: " + err)
+      toast.error("Impossibile caricare il dettaglio: " + err)
     }
   }
 
@@ -558,7 +560,7 @@ const Quotes = () => {
       loadData()
     } catch (err) {
       console.error("Errore eliminazione preventivo:", err)
-      alert("Impossibile eliminare il preventivo: " + err)
+      toast.error("Impossibile eliminare il preventivo: " + err)
     }
   }
 
@@ -581,7 +583,7 @@ const Quotes = () => {
       setIsAddClientOpen(false)
     } catch (err) {
       console.error("Errore salvataggio cliente:", err)
-      alert("Impossibile salvare il cliente: " + err)
+      toast.error("Impossibile salvare il cliente: " + err)
     }
   }
 

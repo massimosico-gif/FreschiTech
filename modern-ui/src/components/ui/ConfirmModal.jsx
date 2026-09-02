@@ -1,9 +1,35 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, X } from 'lucide-react'
 
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = "Elimina", cancelText = "Annulla", type = "danger" }) => {
+  /*
+    Esc annulla.
+
+    PERCHE' SERVE
+    -------------
+    Questa finestra ha preso il posto di `window.confirm`, che si chiudeva con
+    Esc: senza, l'unica via d'uscita e' il mouse, e per un'azione distruttiva
+    e' un passo indietro rispetto a quello che si e' sostituito.
+
+    L'hook sta prima del `return` anticipato: le regole degli hook vietano di
+    chiamarli condizionalmente.
+  */
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return undefined
+
+    const alTasto = (evento) => {
+      if (evento.key === 'Escape') {
+        evento.preventDefault()
+        onClose?.()
+      }
+    }
+
+    document.addEventListener('keydown', alTasto)
+    return () => document.removeEventListener('keydown', alTasto)
+  }, [isOpen, onClose])
+
   if (typeof document === 'undefined') return null
 
   return createPortal(
@@ -21,6 +47,12 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
 
           {/* Modal */}
           <motion.div
+            // `role`/`aria-modal` mancavano: per un lettore di schermo questa
+            // finestra era un div qualsiasi in mezzo alla pagina, mentre
+            // `window.confirm`, che ha sostituito, veniva annunciato.
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}

@@ -9,6 +9,7 @@ import {
 import DrawerShell from './ui/DrawerShell'
 import CategorySelector from './ui/CategorySelector'
 import { CostCenter } from '../types'
+import { useToast } from '../hooks/useFeedback'
 
 interface EditCostCenterDrawerProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ const EditCostCenterDrawer: React.FC<EditCostCenterDrawerProps> = ({
   projectId, 
   onSave 
 }) => {
+  const toast = useToast()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [feePercent, setFeePercent] = useState<number>(0.06)
   const [formData, setFormData] = useState<Partial<CostCenter>>({
@@ -77,7 +79,7 @@ const EditCostCenterDrawer: React.FC<EditCostCenterDrawerProps> = ({
       setFormData(prev => ({ ...prev, category: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova categoria:", err)
-      alert("Impossibile salvare la nuova categoria: " + err)
+      toast.error("Impossibile salvare la nuova categoria: " + err)
     }
   }
 

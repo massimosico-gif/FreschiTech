@@ -24,8 +24,10 @@ import MultiSelect from '../ui/MultiSelect'
 import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
 import ConfirmModal from '../ui/ConfirmModal'
+import { useToast } from '../../hooks/useFeedback'
 
 const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = null, projectId = null, onSave = null }) => {
+  const toast = useToast()
   // Brand Configuration (Centralized Color)
   const brandColor = 'accent'; // Lely Red
   
@@ -133,7 +135,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
       }
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo operatore:", err)
-      alert("Impossibile salvare il nuovo operatore: " + err)
+      toast.error("Impossibile salvare il nuovo operatore: " + err)
     }
   }
 
@@ -163,7 +165,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
       setNewExpenseData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
+      toast.error("Impossibile salvare la nuova fase: " + err)
     }
   }
 

@@ -15,8 +15,10 @@ import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
 import Select from './ui/Select'
 import EditClientDrawer from './EditClientDrawer'
+import { useToast } from '../hooks/useFeedback'
 
 const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
+  const toast = useToast()
   const [errors, setErrors] = useState({})
   const [initialData, setInitialData] = useState(null)
   const [clients, setClients] = useState([])
@@ -127,7 +129,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
       setIsAddClientOpen(false)
     } catch (err) {
       console.error("Errore salvataggio cliente:", err)
-      alert("Impossibile salvare il cliente: " + err)
+      toast.error("Impossibile salvare il cliente: " + err)
     }
   }
 
@@ -184,7 +186,7 @@ const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
     const isClientValid = validateField('client_id', formData.client_id)
     
     if (!isNameValid || !isClientValid) {
-      alert("Controlla i dati inseriti prima di salvare.")
+      toast.error("Controlla i dati inseriti prima di salvare.")
       return
     }
     

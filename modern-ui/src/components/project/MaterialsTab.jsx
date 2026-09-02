@@ -23,8 +23,10 @@ import Select from '../ui/Select'
 import PhaseSelector from '../ui/PhaseSelector'
 import DatePicker from '../ui/DatePicker'
 import ConfirmModal from '../ui/ConfirmModal'
+import { useToast } from '../../hooks/useFeedback'
 
 const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, defaultCostCenterId = null, projectId, onSave, onRefresh }) => {
+  const toast = useToast()
   // Filters
   const initialFilters = {
     search: '',
@@ -230,7 +232,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
         onRefresh()
       }
     } catch (err) {
-      alert("Errore nello spostamento dei materiali: " + err)
+      toast.error("Errore nello spostamento dei materiali: " + err)
     }
   }
 
@@ -254,7 +256,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
         onRefresh()
       }
     } catch (err) {
-      alert("Errore nell'aggiornamento dell'ambito dei materiali: " + err)
+      toast.error("Errore nell'aggiornamento dell'ambito dei materiali: " + err)
     }
   }
 
@@ -688,7 +690,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       setInlineFormData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
+      toast.error("Impossibile salvare la nuova fase: " + err)
     }
   }
 
@@ -717,7 +719,7 @@ const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, default
       setNewMaterialData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
+      toast.error("Impossibile salvare la nuova fase: " + err)
     }
   }
 

@@ -28,8 +28,10 @@ import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
 import VehicleSelector from '../ui/VehicleSelector'
 import ConfirmModal from '../ui/ConfirmModal'
+import { useToast } from '../../hooks/useFeedback'
 
 const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, projectId = null, project = null, onSave = null, onRefresh = null }) => {
+  const toast = useToast()
   // Sorting
   const [sort, setSort] = useState({ field: 'date', direction: 'desc' })
 
@@ -212,7 +214,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         onRefresh()
       }
     } catch (err) {
-      alert("Errore nello spostamento della manodopera: " + err)
+      toast.error("Errore nello spostamento della manodopera: " + err)
     }
   }
 
@@ -236,7 +238,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         onRefresh()
       }
     } catch (err) {
-      alert("Errore nell'aggiornamento dell'ambito della manodopera: " + err)
+      toast.error("Errore nell'aggiornamento dell'ambito della manodopera: " + err)
     }
   }
 
@@ -345,7 +347,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       }
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo operatore:", err)
-      alert("Impossibile salvare il nuovo operatore: " + err)
+      toast.error("Impossibile salvare il nuovo operatore: " + err)
     }
   }
 
@@ -390,7 +392,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       }))
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo mezzo:", err)
-      alert("Impossibile salvare il nuovo mezzo: " + err)
+      toast.error("Impossibile salvare il nuovo mezzo: " + err)
     }
   }
 
@@ -420,7 +422,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       setNewLaborData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
+      toast.error("Impossibile salvare la nuova fase: " + err)
     }
   }
 

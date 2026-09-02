@@ -12,17 +12,34 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.1", features = [] }
+# Incorpora i segreti locali nel binario (vedi build.rs).
+tecno-core-build = { path = "/Users/massimosicondolfi/Desktop/Tauri/TauriKit/core/tecno-core-build" }
 
 [dependencies]
+# Infrastruttura condivisa: database, migrazioni, backup, log, diagnostica.
+# Una correzione fatta li' arriva a questa applicazione senza ricopiare codice.
+#
+# PERCHE' UN PERCORSO ASSOLUTO E NON "../../../TauriKit/..."
+# ---------------------------------------------------------
+# Il percorso relativo si risolve rispetto a questo file, quindi si rompe in un
+# git worktree: da `.claude/worktrees/<nome>/modern-ui/src-tauri` tre livelli
+# piu' su non c'e' nessuna cartella TauriKit, e la compilazione fallisce senza
+# che il motivo sia evidente.
+#
+# Su un'altra macchina va sostituito con la dipendenza git:
+#   tecno-core = { git = "https://github.com/massimosico-gif/TauriKit", package = "tecno-core" }
+# Il repository e' privato: serve che cargo possa autenticarsi (chiave SSH,
+# oppure `net.git-fetch-with-cli = true` con le credenziali gia' in cache).
+tecno-core = { path = "/Users/massimosicondolfi/Desktop/Tauri/TauriKit/core/tecno-core" }
+
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.1", features = [] }
-tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2.1.0"
 tauri-plugin-updater = "2"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "backup"] }
 directories = "5.0"
 calamine = "0.24"

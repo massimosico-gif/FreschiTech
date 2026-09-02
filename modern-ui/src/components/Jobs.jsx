@@ -5,8 +5,10 @@ import EntityCard from './ui/EntityCard'
 import EditJobDrawer from './EditJobDrawer'
 import ConfirmModal from './ui/ConfirmModal'
 import Select from './ui/Select'
+import { useToast } from '../hooks/useFeedback'
 
 const Jobs = ({ onOpenProject }) => {
+  const toast = useToast()
   const [search, setSearch] = useState('')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
@@ -69,7 +71,7 @@ const Jobs = ({ onOpenProject }) => {
       })
       .catch(err => {
         console.error("Errore salvataggio commessa:", err)
-        alert("Impossibile salvare la commessa.")
+        toast.error("Impossibile salvare la commessa.")
       })
   }
 
@@ -87,7 +89,7 @@ const Jobs = ({ onOpenProject }) => {
         })
         .catch(err => {
           console.error("Errore eliminazione:", err)
-          alert("Errore durante l'eliminazione.")
+          toast.error("Errore durante l'eliminazione.")
         })
     }
   }

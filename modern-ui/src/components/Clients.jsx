@@ -4,6 +4,7 @@ import { Plus, Search, Building2, User, Mail, MapPin, Loader2, Users, ArrowLeft,
 import EntityCard from './ui/EntityCard'
 import EditClientDrawer from './EditClientDrawer'
 import ConfirmModal from './ui/ConfirmModal'
+import { useToast } from '../hooks/useFeedback'
 
 const formatCurrency = (value) => {
   const num = Number(value || 0);
@@ -14,6 +15,7 @@ const formatCurrency = (value) => {
 }
 
 const Clients = ({ onOpenProject }) => {
+  const toast = useToast()
   const [search, setSearch] = useState('')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState(null)
@@ -73,7 +75,7 @@ const Clients = ({ onOpenProject }) => {
       })
       .catch(err => {
         console.error("Errore salvataggio cliente:", err)
-        alert("Impossibile salvare il cliente.")
+        toast.error("Impossibile salvare il cliente.")
       })
   }
 
@@ -96,7 +98,7 @@ const Clients = ({ onOpenProject }) => {
         })
         .catch(err => {
           console.error("Errore eliminazione:", err)
-          alert("Errore durante l'eliminazione.")
+          toast.error("Errore durante l'eliminazione.")
         })
     }
   }

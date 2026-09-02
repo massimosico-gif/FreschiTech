@@ -41,9 +41,11 @@ import useProjectStore, {
   useFilteredExpenses, 
   useActiveCC 
 } from '../hooks/useProjectStore'
+import { useToast } from '../hooks/useFeedback'
 
 
 const ProjectDetails = ({ projectId, onBack }) => {
+  const toast = useToast()
   // ─── Store: stato e azioni ────────────────────────────────────────
   const project = useProjectStore(s => s.project)
   const client = useProjectStore(s => s.client)
@@ -170,7 +172,7 @@ const ProjectDetails = ({ projectId, onBack }) => {
       }
     } catch (err) {
       console.error(err)
-      alert(`Errore durante il salvataggio del PDF: ${err}`)
+      toast.error(`Errore durante il salvataggio del PDF: ${err}`)
     }
   }
 
@@ -192,7 +194,7 @@ const ProjectDetails = ({ projectId, onBack }) => {
       }
     } catch (err) {
       console.error(err)
-      alert(`Errore durante il salvataggio del PDF: ${err}`)
+      toast.error(`Errore durante il salvataggio del PDF: ${err}`)
     }
   }
 

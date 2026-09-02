@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Percent, CreditCard, Briefcase, Plus, Save, Trash2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import FormInput from '../ui/FormInput'
+import { useConfirm } from '../../hooks/useFeedback'
 
 const TaxPaymentSettings = () => {
+  const confirm = useConfirm()
   const [taxRates, setTaxRates] = useState([])
   const [paymentConditions, setPaymentConditions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +51,10 @@ const TaxPaymentSettings = () => {
       setTaxRates(taxRates.filter((_, i) => i !== index))
       return
     }
-    if (!window.confirm('Eliminare questa aliquota?')) return
+    if (!(await confirm({
+      title: 'Eliminare l\'aliquota?',
+      message: 'L\'aliquota verra\' rimossa definitivamente.',
+    }))) return
     try {
       await invoke('delete_tax_rate', { id: taxRates[index].id })
       setTaxRates(taxRates.filter((_, i) => i !== index))
@@ -85,7 +90,10 @@ const TaxPaymentSettings = () => {
       setPaymentConditions(paymentConditions.filter((_, i) => i !== index))
       return
     }
-    if (!window.confirm('Eliminare questa condizione di pagamento?')) return
+    if (!(await confirm({
+      title: 'Eliminare la condizione di pagamento?',
+      message: 'La condizione verra\' rimossa definitivamente.',
+    }))) return
     try {
       await invoke('delete_payment_condition', { id: paymentConditions[index].id })
       setPaymentConditions(paymentConditions.filter((_, i) => i !== index))

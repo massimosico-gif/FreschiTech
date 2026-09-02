@@ -15,6 +15,7 @@ import Select from './ui/Select'
 import DatePicker from './ui/DatePicker'
 import PhaseSelector from './ui/PhaseSelector'
 import { Material, CostCenter, CatalogMaterial } from '../types'
+import { useToast } from '../hooks/useFeedback'
 
 interface EditMaterialDrawerProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
   onSave, 
   defaultCostCenterId = null 
 }) => {
+  const toast = useToast()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState<Partial<Material>>({
     project_id: Number(projectId),
@@ -91,7 +93,7 @@ const EditMaterialDrawer: React.FC<EditMaterialDrawerProps> = ({
       setFormData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      alert("Impossibile salvare la nuova fase: " + err)
+      toast.error("Impossibile salvare la nuova fase: " + err)
     }
   }
 
