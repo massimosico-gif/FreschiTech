@@ -9,10 +9,12 @@ import {
   AlertCircle,
   MapPin
 } from 'lucide-react'
-import { validateVAT, validateTaxCode } from '../utils/validation'
+import { validateVAT, validateTaxCode } from '@tecno/ui'
 import DrawerShell from './ui/DrawerShell'
+import { useToast } from '@tecno/ui/feedback'
 
 const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
+  const toast = useToast()
   const [errors, setErrors] = useState({})
   const [initialData, setInitialData] = useState(null)
   const [formData, setFormData] = useState({
@@ -56,7 +58,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
     const isCfValid = validateField('tax_code', formData.tax_code)
     
     if (!isNameValid || !isVatValid || !isCfValid) {
-      alert("Controlla i dati inseriti. Alcuni campi non sono validi.")
+      toast.error("Controlla i dati inseriti. Alcuni campi non sono validi.")
       return
     }
     

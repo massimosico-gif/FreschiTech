@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 
 // UI Components
-import ConfirmModal from './ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 
 // Project Sub-components
 import ProjectHeader from './project/ProjectHeader'

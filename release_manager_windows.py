@@ -1,35 +1,44 @@
-import os
-import subprocess
+"""Release Manager di FreschiTech.
+
+La finestra e' questa: quello che c'e' sotto - allineare la versione, trovare
+l'installer, creare la release, caricare l'asset, aggiornare il manifest - sta
+in `tecno_release`, il pacchetto condiviso di TauriKit, ed e' lo stesso codice
+che usa TecnoRilievi.
+
+    pip install "git+https://github.com/massimosico-gif/TauriKit#subdirectory=core/tecno-release"
+
+LA CHIAVE DI FIRMA NON STA PIU' QUI
+-----------------------------------
+Era una stringa letterale in cima a questo file, su un repository PUBBLICO, e
+per giunta con password vuota. Ora la legge `signing_key.py` da un file non
+versionato. Toglierla non la rende segreta - resta nella storia di git - quindi
+va anche rigenerata: le istruzioni sono in `signing_key.py`.
+"""
+
 import json
+import os
 import shutil
-import datetime
-import requests
-import glob
-import webview
+import subprocess
 import threading
-import time
+from pathlib import Path
 
-# --- CONFIGURAZIONE ---
-APP_NAME = "FreschiTech"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.join(BASE_DIR, "modern-ui")
-REPO_OWNER = "massimosico-gif"
-REPO_NAME = "FreschiTech-Releases"
-GIST_ID = "8305a31d9ccfad4fe99a689baf958d4b"
-RELEASE_REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+import webview
 
-# I segreti vivono in .env (gitignored), MAI in questo file: e' versionato.
-# La chiave privata firma gli aggiornamenti automatici, quindi chi la ottiene
-# puo' far installare codice arbitrario su tutte le macchine con FreschiTech.
-ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
-ENV_SIGNING_KEY = "TAURI_SIGNING_PRIVATE_KEY"
-ENV_SIGNING_PASSWORD = "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+from tecno_release import (
+    ErroreRelease,
+    carica_asset,
+    crea_release,
+    leggi_segreto,
+    leggi_versione,
+    pubblica_manifest,
+    scrivi_versione,
+    trova_installer,
+)
 
-# Credenziali della diagnostica Telegram, lette da Rust con option_env! durante
-# la compilazione. Il prefisso NON e' VITE_: Vite sostituirebbe le variabili
-# VITE_* nel bundle JavaScript, esponendo il token a chiunque abbia l'app.
-ENV_TELEGRAM_TOKEN = "FRESCHITECH_TELEGRAM_BOT_TOKEN"
-ENV_TELEGRAM_CHAT = "FRESCHITECH_TELEGRAM_CHAT_ID"
+from release_config import CARTELLE_ENV, CONFIG, leggi_token
+from signing_key import load_signing_key
+
+PROGETTO = CONFIG.cartella_progetto
 
 HTML_CONTENT = """
 <!DOCTYPE html>
@@ -133,282 +142,200 @@ HTML_CONTENT = """
 </html>
 """
 
+
 class Api:
+    """Il ponte fra la finestra e la procedura di pubblicazione."""
+
     def __init__(self):
         self._window = None
-        self._current_process = None
-        self._is_cancelled = False
+        self._processo = None
+        self._annullato = False
 
-    def set_window(self, window): self._window = window
+    def set_window(self, window):
+        self._window = window
 
-    def log(self, msg, type='default'):
-        if self._window: self._window.evaluate_js(f"log({json.dumps(msg)}, '{type}')")
+    # --- comunicazione con la finestra -------------------------------------
 
-    def progress(self, percent):
-        if self._window: self._window.evaluate_js(f"updateProgress({percent})")
+    def log(self, messaggio, tipo="default"):
+        if self._window:
+            self._window.evaluate_js(f"log({json.dumps(messaggio)}, '{tipo}')")
+        print(f"[{tipo.upper()}] {messaggio}")
+
+    def progress(self, percentuale):
+        if self._window:
+            self._window.evaluate_js(f"updateProgress({percentuale})")
+
+    def _finito(self, riuscito, messaggio=None):
+        if not self._window:
+            return
+        if messaggio:
+            self._window.evaluate_js(f"finish({str(riuscito).lower()}, {json.dumps(messaggio)})")
+        else:
+            self._window.evaluate_js(f"finish({str(riuscito).lower()})")
+
+    # --- chiamate dalla finestra -------------------------------------------
 
     def get_data(self):
-        version = "1.0.0"
-        try:
-            v_path = os.path.join(BASE_DIR, "VERSION")
-            if os.path.exists(v_path):
-                with open(v_path, 'r') as f: version = f.read().strip()
-        except: pass
-        return {"version": version}
+        return {"version": leggi_versione(CONFIG)}
 
     def stop_release(self):
-        self._is_cancelled = True
-        if self._current_process:
-            try: subprocess.run(['taskkill', '/F', '/T', '/PID', str(self._current_process.pid)], capture_output=True)
-            except: pass
+        self._annullato = True
+        if self._processo:
+            # taskkill /T chiude anche i figli, che sono quelli che tengono
+            # occupata la macchina dopo la chiusura della finestra.
+            subprocess.run(
+                f"taskkill /F /T /PID {self._processo.pid}",
+                shell=True, capture_output=True,
+            )
         self.log("Processo interrotto dall'utente.", "error")
 
     def run_release(self, version):
-        self._is_cancelled = False
-        threading.Thread(target=self._process, args=(version,)).start()
+        self._annullato = False
+        threading.Thread(target=self._procedura, args=(version,), daemon=True).start()
 
-    def _process(self, version):
+    # --- la procedura -------------------------------------------------------
+
+    def _compila(self):
+        """Compila mostrando il progresso, e resta interrompibile."""
+        # La cartella dei pacchetti va svuotata prima: altrimenti una build
+        # fallita lascia l'installer della versione precedente, che la ricerca
+        # trova e pubblica come se fosse nuovo.
+        bundle = PROGETTO / "src-tauri/target/release/bundle"
+        if bundle.exists():
+            shutil.rmtree(bundle, ignore_errors=True)
+
+        self._processo = subprocess.Popen(
+            "cmd /c npx tauri build", shell=True, cwd=PROGETTO,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        for riga in self._processo.stdout:
+            if self._annullato:
+                break
+            riga = riga.strip()
+            if "Compiling" in riga:
+                self.log(f"Compilazione: {riga.split('Compiling')[-1].strip()[:30]}...")
+
+        self._processo.wait()
+        return self._processo.returncode == 0
+
+    def _firma(self, installer):
+        ambiente = os.environ.copy()
+        ambiente["TAURI_SIGNING_PRIVATE_KEY"] = load_signing_key()
+        password = leggi_segreto("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", CARTELLE_ENV) or ""
+        ambiente["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = password
+
+        # La password va passata anche vuota: senza, il firmatario la chiede da
+        # tastiera, e qui non c'e' una tastiera da cui rispondere.
+        #
+        # Che oggi sia vuota e' un difetto, non una scelta: quando la chiave
+        # verra' rigenerata (vedi signing_key.py) va data una password vera e
+        # messa in TAURI_SIGNING_PRIVATE_KEY_PASSWORD, fuori dal repository.
+        firmatario = subprocess.Popen(
+            f'cmd /c npx tauri signer sign --password "{password}" "{installer}"',
+            shell=True, cwd=PROGETTO, env=ambiente,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        for riga in firmatario.stdout:
+            riga = riga.strip()
+            if riga:
+                self.log(f"Firma: {riga}")
+        firmatario.wait()
+
+        file_firma = Path(str(installer) + ".sig")
+        if firmatario.returncode != 0 or not file_firma.exists():
+            raise ErroreRelease("Firma non riuscita: il file .sig non e' stato prodotto.")
+
+        valore = file_firma.read_text(encoding="utf-8").strip()
+        file_firma.unlink()
+        return valore
+
+    def _procedura(self, versione):
         try:
-            token = self._get_token()
+            token = leggi_token()
             if not token:
-                self.log("ERRORE: GITHUB_TOKEN non trovato", "error")
-                self._window.evaluate_js("finish(false)")
+                self.log("Token GitHub non trovato in .env ne' in GitHubToken.env.", "error")
+                self._finito(False)
                 return
-
             self.progress(10)
-            self.log("Sincronizzazione file versione...", "info")
-            self._update_files(version)
+
+            self.log("Allineamento della versione nei tre file...", "info")
+            for percorso in scrivi_versione(CONFIG, versione):
+                self.log(f"  {percorso.relative_to(CONFIG.cartella_base)}")
             self.progress(15)
 
-            # 2. Build
-            self.log("Avvio build FreschiTech...", "info")
-            bundle_base = os.path.join(PROJECT_DIR, "src-tauri", "target", "release", "bundle")
-            if os.path.exists(bundle_base): shutil.rmtree(bundle_base)
-
-            # Le credenziali Telegram vengono passate all'ambiente di build:
-            # finiscono nel binario Rust, non nel bundle JavaScript.
-            build_env = os.environ.copy()
-            for name in (ENV_TELEGRAM_TOKEN, ENV_TELEGRAM_CHAT):
-                value = self._get_secret(name)
-                if value:
-                    build_env[name] = value
-                else:
-                    self.log(f"Avviso: {name} non impostato, diagnostica Telegram disattivata.", "warning")
-
-            self._current_process = subprocess.Popen("cmd /c npx tauri build", shell=True, cwd=PROJECT_DIR, env=build_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            
-            for line in self._current_process.stdout:
-                if self._is_cancelled: break
-                line = line.strip()
-                if "Compiling" in line:
-                    p = line.split("Compiling")
-                    if len(p) > 1: self.log(f"Build: {p[1].strip()[:30]}...")
-            
-            self._current_process.wait()
-            if self._is_cancelled:
-                self._window.evaluate_js("finish(false, 'Annullato')")
+            self.log("Compilazione...", "info")
+            riuscita = self._compila()
+            if self._annullato:
+                self._finito(False, "Annullato")
                 return
-
-            if self._current_process.returncode != 0:
-                self.log("ERRORE: Build fallita!", "error")
-                self._window.evaluate_js("finish(false)")
+            if not riuscita:
+                self.log("Compilazione fallita.", "error")
+                self._finito(False)
                 return
-
             self.progress(80)
 
-            # 3. Installer
-            installer_path = self._find_installer(version)
-            if not installer_path:
-                self.log("ERRORE: Installer non trovato!", "error")
-                self._window.evaluate_js("finish(false)")
-                return
-            
-            self.log(f"Trovato installer: {os.path.basename(installer_path)}", "success")
+            # `trova_installer` filtra sull'estensione. La ricerca precedente
+            # usava un glob `*{versione}*.*`, che prendeva anche il .sig di una
+            # firma precedente: essendo piu' recente vinceva l'ordinamento per
+            # data e veniva pubblicato al posto del programma, e i client
+            # scaricavano poche centinaia di byte.
+            installer = trova_installer(CONFIG, versione)
+            if installer is None:
+                raise ErroreRelease(
+                    f"Nessun installer della versione {versione} nella cartella bundle."
+                )
+            self.log(f"Installer: {installer.name}", "success")
             self.progress(85)
 
-            # 4. Sign
-            self.log("Firma digitale in corso...", "info")
-            signing_key = self._get_secret(ENV_SIGNING_KEY)
-            if not signing_key:
-                self.log(
-                    f"ERRORE: {ENV_SIGNING_KEY} non trovato in .env. "
-                    "Genera la coppia di chiavi con 'npx tauri signer generate' "
-                    "e inserisci la chiave privata nel file .env.",
-                    "error",
-                )
-                self._window.evaluate_js("finish(false)")
-                return
-
-            signing_password = self._get_secret(ENV_SIGNING_PASSWORD) or ""
-            env = os.environ.copy()
-            env[ENV_SIGNING_KEY] = signing_key
-            env[ENV_SIGNING_PASSWORD] = signing_password
-
-            # La password viaggia nell'ambiente, non sulla riga di comando:
-            # gli argomenti di un processo sono leggibili da altri utenti.
-            sign_cmd = f'cmd /c npx tauri signer sign "{installer_path}"'
-            subprocess.run(sign_cmd, shell=True, cwd=PROJECT_DIR, env=env)
-            
-            sig_file = installer_path + ".sig"
-            if not os.path.exists(sig_file):
-                self.log("ERRORE: Firma fallita (file .sig non generato)!", "error")
-                self._window.evaluate_js("finish(false)")
-                return
-            
-            with open(sig_file, 'r') as f: signature = f.read().strip()
-            self.log("Firma acquisita con successo.", "success")
+            self.log("Firma digitale...", "info")
+            firma = self._firma(installer)
+            self.log("Firma acquisita.", "success")
             self.progress(90)
 
-            # 5. GitHub
-            self.log("Connessione a GitHub per la release...", "info")
-            release_id = self._create_release(token, version)
-            if not release_id:
-                self.log("ERRORE: Impossibile creare/recuperare la release su GitHub.", "error")
-                self._window.evaluate_js("finish(false)")
-                return
-            self.log(f"Release GitHub pronta (ID: {release_id})", "success")
-            self.progress(93)
+            self.log("Creazione della release su GitHub...", "info")
+            id_release = crea_release(CONFIG, token, versione)
 
-            # 6. Upload
-            self.log(f"Caricamento {os.path.basename(installer_path)} su GitHub...", "info")
-            if not self._upload_asset(token, release_id, installer_path):
-                self.log("ERRORE: Caricamento asset fallito.", "error")
-                self._window.evaluate_js("finish(false)")
-                return
-            self.log("Asset caricato correttamente.", "success")
-            self.progress(97)
+            self.log(f"Caricamento di {installer.name}...", "info")
+            carica_asset(CONFIG, token, id_release, installer)
+            self.progress(95)
 
-            # 7. Gist (Update Gist with both Windows and existing macOS platforms to not break them!)
-            self.log("Sincronizzazione finale con il Gist...", "info")
-            
-            # Fetch existing Gist so we preserve macOS platforms!
-            gist_url = f"https://api.github.com/gists/{GIST_ID}"
-            headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-            gist_resp = requests.get(gist_url, headers=headers, timeout=20)
-            
-            platforms_data = {}
-            if gist_resp.status_code == 200:
-                try:
-                    current_gist = gist_resp.json()
-                    current_content = json.loads(current_gist["files"]["update.json"]["content"])
-                    platforms_data = current_content.get("platforms", {})
-                except Exception as e:
-                    self.log(f"Avviso: Errore lettura Gist esistente ({str(e)}), verrà creata una nuova configurazione.", "warning")
-            
-            # Add or update Windows platform
-            platforms_data["windows-x86_64"] = {
-                "signature": signature,
-                "url": f"{RELEASE_REPO_URL}/releases/download/{version}/{os.path.basename(installer_path)}"
-            }
-            
-            update_json = {
-                "version": version,
-                "notes": f"Aggiornamento Windows v{version}",
-                "pub_date": datetime.datetime.now().isoformat() + "Z",
-                "platforms": platforms_data
-            }
-            
-            if self._update_gist(token, version, update_json):
-                self.progress(100)
-                self._window.evaluate_js("finish(true)")
-            else:
-                self.log("ERRORE: Impossibile aggiornare il Gist.", "error")
-                self._window.evaluate_js("finish(false)")
+            # Solo la voce Windows. `pubblica_manifest` rilegge il manifest e
+            # sostituisce solo questa: scrivere `platforms` da capo - come si
+            # faceva qui - cancellerebbe le voci darwin il giorno in cui
+            # FreschiTech venisse pubblicata anche per macOS, senza che niente
+            # lo segnali, perche' la pubblicazione riesce comunque.
+            self.log("Aggiornamento del manifest dell'updater...", "info")
+            pubblica_manifest(
+                CONFIG, token, versione,
+                {
+                    "windows-x86_64": {
+                        "signature": firma,
+                        "url": f"{CONFIG.url_repo_release}/releases/download/{versione}/{installer.name}",
+                    }
+                },
+            )
 
-        except Exception as e:
-            self.log(f"ERRORE SISTEMA: {str(e)}", "error")
-            self._window.evaluate_js("finish(false)")
+            self.progress(100)
+            self.log(f"{CONFIG.nome_app} v{versione} pubblicata.", "success")
+            self._finito(True)
 
-    def _get_secret(self, name):
-        """Legge un segreto dai file .env, con fallback sulle variabili d'ambiente.
+        except ErroreRelease as errore:
+            # Le funzioni condivise sollevano invece di restituire False: prima
+            # un caricamento fallito passava inosservato e il manifest finiva
+            # per puntare a un file inesistente.
+            self.log(str(errore), "error")
+            self._finito(False)
+        except Exception as errore:
+            if not self._annullato:
+                self.log(f"Errore inatteso: {errore}", "error")
+                self._finito(False)
 
-        Cerca sia nella cartella principale sia in modern-ui: storicamente i
-        segreti del frontend stavano nel secondo file, quelli di release nel
-        primo. Vince la prima occorrenza trovata.
-        """
-        for directory in (BASE_DIR, PROJECT_DIR):
-            env_path = os.path.join(directory, ".env")
-            if not os.path.exists(env_path):
-                continue
-            with open(env_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    key, _, value = line.partition("=")
-                    if key.strip() == name:
-                        return value.strip().strip('"').strip("'")
-        return os.environ.get(name)
-
-    def _get_token(self):
-        return self._get_secret(ENV_GITHUB_TOKEN)
-
-    def _update_files(self, version):
-        with open(os.path.join(BASE_DIR, 'VERSION'), 'w') as f: f.write(version)
-        p_path = os.path.join(PROJECT_DIR, 'package.json')
-        with open(p_path, 'r') as f: pkg = json.load(f)
-        pkg['version'] = version
-        with open(p_path, 'w') as f: json.dump(pkg, f, indent=2)
-        t_path = os.path.join(PROJECT_DIR, 'src-tauri', 'tauri.conf.json')
-        with open(t_path, 'r') as f: tconf = json.load(f)
-        tconf['version'] = version
-        with open(t_path, 'w') as f: json.dump(tconf, f, indent=2)
-
-    def _find_installer(self, version):
-        """Individua l'installer prodotto dalla build.
-
-        Il glob deve restare ancorato all'estensione dell'installer. Con un
-        generico `*.*` finivano nella selezione anche i file .sig di una firma
-        precedente: essendo piu' recenti dell'installer vincevano
-        l'ordinamento per data di modifica e venivano pubblicati al loro
-        posto, con il risultato che l'updater proponeva ai client un file da
-        pochi centinaia di byte al posto del programma.
-        """
-        for sub, ext in (("msi", ".msi"), ("nsis", ".exe")):
-            path = os.path.join(PROJECT_DIR, "src-tauri", "target", "release", "bundle", sub)
-            if not os.path.exists(path): continue
-            files = [f for f in glob.glob(os.path.join(path, f"*{version}*{ext}"))
-                     if f.lower().endswith(ext)]
-            if files: return sorted(files, key=os.path.getmtime, reverse=True)[0]
-        return None
-
-    def _create_release(self, token, version):
-        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
-        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-        data = {"tag_name": version, "name": f"v{version}", "body": f"Build Windows v{version}", "draft": False, "prerelease": False}
-        try:
-            resp = requests.post(url, headers=headers, json=data, timeout=20)
-            if resp.status_code == 201: return resp.json()["id"]
-            elif resp.status_code == 422:
-                get_resp = requests.get(f"{url}/tags/{version}", headers=headers, timeout=20)
-                if get_resp.status_code == 200: return get_resp.json()["id"]
-        except: pass
-        return None
-
-    def _upload_asset(self, token, release_id, file_path):
-        name = os.path.basename(file_path)
-        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-        try:
-            assets = requests.get(f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/{release_id}/assets", headers=headers, timeout=20).json()
-            for a in assets:
-                if a["name"] == name: requests.delete(a["url"], headers=headers, timeout=20)
-            url = f"https://uploads.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/{release_id}/assets?name={name}"
-            with open(file_path, "rb") as f:
-                r = requests.post(url, headers={"Authorization": f"token {token}", "Content-Type": "application/octet-stream"}, data=f, timeout=60)
-            return r.status_code == 201
-        except: return False
-
-    def _update_gist(self, token, version, content):
-        url = f"https://api.github.com/gists/{GIST_ID}"
-        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-        data = {"files": {"update.json": {"content": json.dumps(content, indent=2)}, "version.txt": {"content": version}}}
-        try:
-            resp = requests.patch(url, headers=headers, json=data, timeout=20)
-            return resp.status_code == 200
-        except: return False
 
 if __name__ == "__main__":
     api = Api()
-    window = webview.create_window('FreschiTech - Release Manager Pro', html=HTML_CONTENT, js_api=api, width=650, height=580)
-    api.set_window(window)
+    finestra = webview.create_window(
+        f"{CONFIG.nome_app} - Release Manager",
+        html=HTML_CONTENT, js_api=api, width=650, height=580,
+    )
+    api.set_window(finestra)
     webview.start()

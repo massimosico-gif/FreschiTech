@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import Card from '../ui/Card'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 
 const ListManager = ({ title, icon: Icon, items, onAdd, onRemove, inputVal, setInputVal, placeholder }) => {
   const filteredItems = inputVal
@@ -212,8 +212,8 @@ const CategoriesSettings = () => {
         onConfirm={() => removeItem(confirmDelete.listKey, confirmDelete.value)}
         title="Elimina Elemento"
         message={`Sei sicuro di voler eliminare ${confirmDelete.label} "${confirmDelete.value}"?`}
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
     </div>

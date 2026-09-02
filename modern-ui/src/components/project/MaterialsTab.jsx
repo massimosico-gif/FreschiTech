@@ -22,7 +22,7 @@ import {
 import Select from '../ui/Select'
 import PhaseSelector from '../ui/PhaseSelector'
 import DatePicker from '../ui/DatePicker'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import Kbd from '../ui/Kbd'
 import useAutocomplete from '../../hooks/useAutocomplete'
 import usePendingBulkAction from '../../hooks/usePendingBulkAction'

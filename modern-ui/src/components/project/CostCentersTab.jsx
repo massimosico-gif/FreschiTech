@@ -3,9 +3,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity, Pencil, Trash2 } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
 import Select from '../ui/Select'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import ViewToggle from '../ui/ViewToggle'
-import { formatEuro } from '../../utils/format'
+import { formatEuro } from '@tecno/ui'
 
 /** Oltre questa soglia l'elenco compatto diventa il predefinito. */
 const SOGLIA_ELENCO = 8
@@ -282,8 +282,8 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
         }}
         title="Elimina Centro di Costo"
         message="Sei sicuro di voler eliminare definitivamente questo centro di costo? Tutti i materiali, la manodopera e le spese associate a questo centro perderanno questo riferimento."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
     </div>

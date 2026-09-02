@@ -23,7 +23,7 @@ import {
   BarChart3,
   Euro
 } from 'lucide-react'
-import { formatEuro, formatNumber } from '../utils/format'
+import { formatEuro, formatAmount } from '@tecno/ui'
 import { getRecentProjects } from '../utils/recentProjects'
 
 const LELY_RED = '#E30613'
@@ -161,12 +161,12 @@ const Dashboard = ({ onOpenProject, onNavigate }) => {
   const tiles = useMemo(() => {
     if (!stats) return []
     return [
-      { label: 'Totale preventivato', value: `€ ${formatNumber(stats.total_revenue)}`, icon: <TrendingUp size={20} />, color: LELY_RED },
+      { label: 'Totale preventivato', value: `€ ${formatAmount(stats.total_revenue)}`, icon: <TrendingUp size={20} />, color: LELY_RED },
       { label: 'Commesse attive', value: String(stats.invoices_count ?? 0), icon: <FileText size={20} />, color: '#3b82f6' },
       { label: 'Clienti', value: String(stats.clients_count ?? 0), icon: <Users size={20} />, color: '#8b5cf6' },
-      { label: 'Costi cantieri', value: `€ ${formatNumber(stats.total_pending)}`, icon: <CreditCard size={20} />, color: '#f43f5e' },
-      { label: 'Utile previsto', value: `€ ${formatNumber(stats.utile_previsto)}`, icon: <BarChart3 size={20} />, color: '#10b981' },
-      { label: 'Utile sul budget', value: `€ ${formatNumber(stats.utile_effettivo)}`, icon: <Euro size={20} />, color: '#06b6d4' },
+      { label: 'Costi cantieri', value: `€ ${formatAmount(stats.total_pending)}`, icon: <CreditCard size={20} />, color: '#f43f5e' },
+      { label: 'Utile previsto', value: `€ ${formatAmount(stats.utile_previsto)}`, icon: <BarChart3 size={20} />, color: '#10b981' },
+      { label: 'Utile sul budget', value: `€ ${formatAmount(stats.utile_effettivo)}`, icon: <Euro size={20} />, color: '#06b6d4' },
     ]
   }, [stats])
 

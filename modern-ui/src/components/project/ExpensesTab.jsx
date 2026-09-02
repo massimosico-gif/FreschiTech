@@ -23,7 +23,7 @@ import Select from '../ui/Select'
 import MultiSelect from '../ui/MultiSelect'
 import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import Kbd from '../ui/Kbd'
 
 const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = null, projectId = null, onSave = null }) => {
@@ -699,8 +699,8 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
         }}
         title="Elimina Spesa"
         message="Sei sicuro di voler eliminare definitivamente questa spesa? L'azione è irreversibile."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
     </div>

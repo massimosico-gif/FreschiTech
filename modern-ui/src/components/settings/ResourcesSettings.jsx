@@ -12,10 +12,12 @@ import {
   Truck
 } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import DrawerShell from '../ui/DrawerShell'
+import { useToast } from '@tecno/ui/feedback'
 
 const ResourcesSettings = () => {
+  const toast = useToast()
   const [allGlobalSettings, setAllGlobalSettings] = useState({})
   const [settings, setSettings] = useState({
     vehicles: []
@@ -98,7 +100,7 @@ const ResourcesSettings = () => {
     } else {
       // Nuovo furgone
       if (settings.vehicles.some(v => v.name.toLowerCase() === vehName.toLowerCase())) {
-        alert("Un mezzo con questo nome esiste già.")
+        toast.error("Un mezzo con questo nome esiste già.")
         return
       }
       updatedVehicles = [...settings.vehicles, { name: vehName, km_cost: kmCost }]
@@ -117,7 +119,7 @@ const ResourcesSettings = () => {
       setStatus({ type: 'success', message: 'Parco mezzi aggiornato' })
       setTimeout(() => setStatus({ type: '', message: '' }), 2000)
     } catch (err) {
-      alert("Errore salvataggio: " + err)
+      toast.error("Errore salvataggio: " + err)
     }
   }
 
@@ -136,7 +138,7 @@ const ResourcesSettings = () => {
         setStatus({ type: 'success', message: 'Mezzo rimosso' })
         setTimeout(() => setStatus({ type: '', message: '' }), 2000)
       } catch (err) {
-        alert("Errore rimozione: " + err)
+        toast.error("Errore rimozione: " + err)
       }
     }
   }

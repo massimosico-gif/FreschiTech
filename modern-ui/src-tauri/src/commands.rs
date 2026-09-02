@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use crate::db::get_connection;
+use tecno_core::db::get_connection;
+use tecno_core::log_esito;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Municipality {
@@ -226,7 +227,7 @@ fn log_file_name(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_stats() -> serde_json::Value {
     let conn = match get_connection() {
         Ok(c) => c,
@@ -396,7 +397,7 @@ pub fn get_stats() -> serde_json::Value {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search_municipalities(query: String) -> Result<Vec<Municipality>, String> {
     let comuni: Vec<Municipality> = serde_json::from_str(COMUNI_JSON).map_err(|e| e.to_string())?;
     let query_lower = query.to_lowercase();
@@ -430,7 +431,7 @@ impl Client {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_clients() -> Result<Vec<Client>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT id, type, name, street, city, zip_code, province, vat_id, tax_code, email, pec, phone, notes, distance FROM clients ORDER BY name ASC").map_err(|e| e.to_string())?;
@@ -443,8 +444,14 @@ pub fn get_clients() -> Result<Vec<Client>, String> {
     Ok(clients)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_client(client: Client) -> Result<(), String> {
+    let esito = save_client_impl(client);
+    log_esito("save_client", &esito);
+    esito
+}
+
+fn save_client_impl(client: Client) -> Result<(), String> {
     log::info!("CMD [save_client] {}", log_target(client.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -485,8 +492,14 @@ pub fn save_client(client: Client) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_client(id: i64) -> Result<(), String> {
+    let esito = delete_client_impl(id);
+    log_esito("delete_client", &esito);
+    esito
+}
+
+fn delete_client_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_client] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -501,7 +514,7 @@ pub fn delete_client(id: i64) -> Result<(), String> {
 }
 
 // PROJECTS (COMMESSE)
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_projects() -> Result<Vec<Project>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("
@@ -561,8 +574,14 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
     Ok(projects)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_project(project: Project) -> Result<(), String> {
+    let esito = save_project_impl(project);
+    log_esito("save_project", &esito);
+    esito
+}
+
+fn save_project_impl(project: Project) -> Result<(), String> {
     log::info!("CMD [save_project] {} (client_id={})", log_target(project.id), project.client_id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -601,8 +620,14 @@ pub fn save_project(project: Project) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_project(id: i64) -> Result<(), String> {
+    let esito = delete_project_impl(id);
+    log_esito("delete_project", &esito);
+    esito
+}
+
+fn delete_project_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_project] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -617,7 +642,7 @@ pub fn delete_project(id: i64) -> Result<(), String> {
 }
 
 // COST CENTERS
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_cost_centers(project_id: i64) -> Result<Vec<CostCenter>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT id, project_id, brand, model, category, base_cost, markup, shipping, install_fee, accepted_budget, install_fee_percent FROM cost_centers WHERE project_id = ? ORDER BY id ASC")
@@ -632,8 +657,14 @@ pub fn get_cost_centers(project_id: i64) -> Result<Vec<CostCenter>, String> {
     Ok(centers)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_cost_center(cc: CostCenter) -> Result<(), String> {
+    let esito = save_cost_center_impl(cc);
+    log_esito("save_cost_center", &esito);
+    esito
+}
+
+fn save_cost_center_impl(cc: CostCenter) -> Result<(), String> {
     log::info!("CMD [save_cost_center] {} (project_id={})", log_target(cc.id), cc.project_id);
     let result = (|| -> Result<(), String> {
         if cc.model.trim().is_empty() {
@@ -674,8 +705,14 @@ pub fn save_cost_center(cc: CostCenter) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_cost_center(id: i64) -> Result<(), String> {
+    let esito = delete_cost_center_impl(id);
+    log_esito("delete_cost_center", &esito);
+    esito
+}
+
+fn delete_cost_center_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_cost_center] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
@@ -701,7 +738,7 @@ pub fn delete_cost_center(id: i64) -> Result<(), String> {
 }
 
 // MATERIALS
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_materials(project_id: i64) -> Result<Vec<Material>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("
@@ -721,8 +758,14 @@ pub fn get_materials(project_id: i64) -> Result<Vec<Material>, String> {
     Ok(materials)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_material(mat: Material) -> Result<(), String> {
+    let esito = save_material_impl(mat);
+    log_esito("save_material", &esito);
+    esito
+}
+
+fn save_material_impl(mat: Material) -> Result<(), String> {
     log::info!("CMD [save_material] {} (project_id={})", log_target(mat.id), mat.project_id);
     let result = (|| -> Result<(), String> {
         if mat.description.trim().is_empty() {
@@ -786,8 +829,14 @@ pub fn save_material(mat: Material) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_material(id: i64) -> Result<(), String> {
+    let esito = delete_material_impl(id);
+    log_esito("delete_material", &esito);
+    esito
+}
+
+fn delete_material_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_material] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -801,8 +850,14 @@ pub fn delete_material(id: i64) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_materials_cost_center(material_ids: Vec<i64>, cost_center_id: Option<i64>) -> Result<(), String> {
+    let esito = move_materials_cost_center_impl(material_ids, cost_center_id);
+    log_esito("move_materials_cost_center", &esito);
+    esito
+}
+
+fn move_materials_cost_center_impl(material_ids: Vec<i64>, cost_center_id: Option<i64>) -> Result<(), String> {
     log::info!("CMD [move_materials_cost_center] Input: ids={:?}, target_cc={:?}", material_ids, cost_center_id);
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
@@ -826,8 +881,14 @@ pub fn move_materials_cost_center(material_ids: Vec<i64>, cost_center_id: Option
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_materials_phase(material_ids: Vec<i64>, phase: Option<String>) -> Result<(), String> {
+    let esito = update_materials_phase_impl(material_ids, phase);
+    log_esito("update_materials_phase", &esito);
+    esito
+}
+
+fn update_materials_phase_impl(material_ids: Vec<i64>, phase: Option<String>) -> Result<(), String> {
     log::info!("CMD [update_materials_phase] Input: ids={:?}, target_phase={:?}", material_ids, phase);
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
@@ -851,8 +912,14 @@ pub fn update_materials_phase(material_ids: Vec<i64>, phase: Option<String>) -> 
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_labor_phase(labor_ids: Vec<i64>, phase: Option<String>) -> Result<(), String> {
+    let esito = update_labor_phase_impl(labor_ids, phase);
+    log_esito("update_labor_phase", &esito);
+    esito
+}
+
+fn update_labor_phase_impl(labor_ids: Vec<i64>, phase: Option<String>) -> Result<(), String> {
     log::info!("CMD [update_labor_phase] Input: ids={:?}, target_phase={:?}", labor_ids, phase);
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
@@ -913,8 +980,14 @@ pub fn update_labor_phase(labor_ids: Vec<i64>, phase: Option<String>) -> Result<
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_labor_cost_center(labor_ids: Vec<i64>, cost_center_id: Option<i64>) -> Result<(), String> {
+    let esito = move_labor_cost_center_impl(labor_ids, cost_center_id);
+    log_esito("move_labor_cost_center", &esito);
+    esito
+}
+
+fn move_labor_cost_center_impl(labor_ids: Vec<i64>, cost_center_id: Option<i64>) -> Result<(), String> {
     log::info!("CMD [move_labor_cost_center] Input: ids={:?}, target_cc={:?}", labor_ids, cost_center_id);
     let result = (|| -> Result<(), String> {
         let mut conn = get_connection().map_err(|e| e.to_string())?;
@@ -975,7 +1048,7 @@ pub fn move_labor_cost_center(labor_ids: Vec<i64>, cost_center_id: Option<i64>) 
 
 
 // LABOR
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_labor(project_id: i64) -> Result<Vec<Labor>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("
@@ -995,8 +1068,14 @@ pub fn get_labor(project_id: i64) -> Result<Vec<Labor>, String> {
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_labor(labor: Labor) -> Result<(), String> {
+    let esito = save_labor_impl(labor);
+    log_esito("save_labor", &esito);
+    esito
+}
+
+fn save_labor_impl(labor: Labor) -> Result<(), String> {
     log::info!("CMD [save_labor] {} (project_id={})", log_target(labor.id), labor.project_id);
     let result = (|| -> Result<(), String> {
         let t_cost = labor.travel_cost.unwrap_or(0.0);
@@ -1035,8 +1114,14 @@ pub fn save_labor(labor: Labor) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_labor(id: i64) -> Result<(), String> {
+    let esito = delete_labor_impl(id);
+    log_esito("delete_labor", &esito);
+    esito
+}
+
+fn delete_labor_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_labor] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1051,7 +1136,7 @@ pub fn delete_labor(id: i64) -> Result<(), String> {
 }
 
 // EXPENSES
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_expenses(project_id: i64) -> Result<Vec<Expense>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("
@@ -1071,8 +1156,14 @@ pub fn get_expenses(project_id: i64) -> Result<Vec<Expense>, String> {
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_expense(expense: Expense) -> Result<(), String> {
+    let esito = save_expense_impl(expense);
+    log_esito("save_expense", &esito);
+    esito
+}
+
+fn save_expense_impl(expense: Expense) -> Result<(), String> {
     log::info!("CMD [save_expense] {} (project_id={})", log_target(expense.id), expense.project_id);
     let result = (|| -> Result<(), String> {
         if expense.description.trim().is_empty() {
@@ -1107,8 +1198,14 @@ pub fn save_expense(expense: Expense) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_expense(id: i64) -> Result<(), String> {
+    let esito = delete_expense_impl(id);
+    log_esito("delete_expense", &esito);
+    esito
+}
+
+fn delete_expense_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_expense] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1123,7 +1220,7 @@ pub fn delete_expense(id: i64) -> Result<(), String> {
 }
 
 // EMPLOYEES
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_employees() -> Result<Vec<Employee>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT id, name, default_hourly_cost FROM employees ORDER BY name ASC").map_err(|e| e.to_string())?;
@@ -1136,8 +1233,14 @@ pub fn get_employees() -> Result<Vec<Employee>, String> {
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_employee(employee: Employee) -> Result<(), String> {
+    let esito = save_employee_impl(employee);
+    log_esito("save_employee", &esito);
+    esito
+}
+
+fn save_employee_impl(employee: Employee) -> Result<(), String> {
     log::info!("CMD [save_employee] {}", log_target(employee.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1161,8 +1264,14 @@ pub fn save_employee(employee: Employee) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_employee(id: i64) -> Result<(), String> {
+    let esito = delete_employee_impl(id);
+    log_esito("delete_employee", &esito);
+    esito
+}
+
+fn delete_employee_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_employee] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1175,7 +1284,7 @@ pub fn delete_employee(id: i64) -> Result<(), String> {
     }
     result
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_global_settings() -> Result<serde_json::Value, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT key, value FROM global_settings").map_err(|e| e.to_string())?;
@@ -1199,8 +1308,14 @@ pub fn get_global_settings() -> Result<serde_json::Value, String> {
     Ok(serde_json::Value::Object(map))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_global_settings(settings: serde_json::Value) -> Result<(), String> {
+    let esito = save_global_settings_impl(settings);
+    log_esito("save_global_settings", &esito);
+    esito
+}
+
+fn save_global_settings_impl(settings: serde_json::Value) -> Result<(), String> {
     // Solo i nomi delle chiavi, mai i valori: fra le impostazioni c'e' anche
     // `telegram_bot_token`, che finirebbe in chiaro nel file di log.
     let changed_keys: Vec<&str> = settings
@@ -1233,7 +1348,7 @@ pub fn save_global_settings(settings: serde_json::Value) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_app_log(app: tauri::AppHandle) -> Result<String, String> {
     use tauri::Manager;
     use std::fs;
@@ -1264,25 +1379,17 @@ pub fn read_app_log(app: tauri::AppHandle) -> Result<String, String> {
     Err("Nessun file di log trovato o leggibile".to_string())
 }
 
-#[tauri::command]
-pub fn log_frontend_error(message: String, stack: String) {
-    log::error!("CRASH_FRONTEND: {}\nStack Trace:\n{}", message, stack);
-}
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_database(dest_path: String) -> Result<(), String> {
-    log::info!("CMD [export_database] destinazione: {}", log_file_name(&dest_path));
+    log::info!("CMD [export_database] verso {}", tecno_core::paths::etichetta_file(std::path::Path::new(&dest_path)));
     let result = (|| -> Result<(), String> {
-        use crate::db::get_db_path;
-        use std::fs;
-        
-        let db_path = get_db_path();
-        if !db_path.exists() {
-            return Err("Il file di database non esiste".to_string());
-        }
-        
-        fs::copy(db_path, dest_path).map_err(|e| e.to_string())?;
-        Ok(())
+        // NON `fs::copy`: copiare il file mentre SQLite ci sta scrivendo puo'
+        // produrre una copia incoerente, che sembra riuscita e si scopre rotta
+        // il giorno in cui serve. L'API di backup online di SQLite garantisce
+        // uno snapshot consistente anche a database aperto.
+        let conn = tecno_core::db::get_connection().map_err(|e| e.to_string())?;
+        conn.backup(rusqlite::DatabaseName::Main, &dest_path, None)
+            .map_err(|e| e.to_string())
     })();
     match &result {
         Ok(_) => log::info!("CMD [export_database] Success"),
@@ -1291,9 +1398,9 @@ pub fn export_database(dest_path: String) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_pdf_file(dest_path: String, content: Vec<u8>) -> Result<(), String> {
-    log::info!("CMD [save_pdf_file] destinazione: {}, {} byte", log_file_name(&dest_path), content.len());
+    log::info!("CMD [save_pdf_file] verso {} ({} byte)", tecno_core::paths::etichetta_file(std::path::Path::new(&dest_path)), content.len());
     let result = (|| -> Result<(), String> {
         use std::fs;
         fs::write(dest_path, content).map_err(|e| e.to_string())
@@ -1306,136 +1413,18 @@ pub fn save_pdf_file(dest_path: String, content: Vec<u8>) -> Result<(), String> 
 }
 
 // ==========================================
-// BACKUP AUTOMATICO
+// BACKUP E DIAGNOSTICA: NON SONO PIU' QUI
 // ==========================================
-
-/// Stato dei backup, per il pannello "Dati & Log".
-///
-/// Un backup che nessuno sa di avere e' meta' funzione: l'utente deve poter
-/// vedere dove sono i file e quando risale l'ultimo.
-#[tauri::command]
-pub fn get_backup_info() -> Result<serde_json::Value, String> {
-    let dir = crate::backup::backup_dir();
-    let backups = crate::backup::list_backups(&dir);
-
-    let latest = backups.first().and_then(|path| {
-        let modified = std::fs::metadata(path).ok()?.modified().ok()?;
-        let epoch = modified
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()?
-            .as_secs();
-
-        get_connection()
-            .and_then(|conn| {
-                conn.query_row(
-                    "SELECT strftime('%d/%m/%Y %H:%M', ?1, 'unixepoch', 'localtime')",
-                    [epoch as i64],
-                    |row| row.get::<_, String>(0),
-                )
-            })
-            .ok()
-    });
-
-    Ok(serde_json::json!({
-        "directory": dir.to_string_lossy(),
-        "count": backups.len(),
-        "keep": crate::backup::KEEP_COUNT,
-        "latest": latest,
-    }))
-}
-
-/// Crea subito un backup, senza attendere la scadenza delle 24 ore.
-#[tauri::command]
-pub fn create_backup_now() -> Result<String, String> {
-    log::info!("CMD [create_backup_now]");
-    let path = crate::backup::create_backup()?;
-    crate::backup::prune(&crate::backup::backup_dir(), crate::backup::KEEP_COUNT);
-    Ok(path.to_string_lossy().to_string())
-}
-
-// ==========================================
-// DIAGNOSTICA (TELEGRAM)
-// ==========================================
-
-/// Invia il file di log al canale di diagnostica.
-///
-/// Prima l'invio avveniva dal frontend con una `fetch` diretta alle API di
-/// Telegram, usando `import.meta.env.VITE_TELEGRAM_BOT_TOKEN`: Vite sostituisce
-/// le variabili `VITE_*` a build time, quindi il token del bot finiva in chiaro
-/// nel bundle JavaScript distribuito. Ora il token resta lato backend.
-#[tauri::command]
-pub fn send_log_to_telegram(app: tauri::AppHandle) -> Result<(), String> {
-    log::info!("CMD [send_log_to_telegram]");
-
-    let (token, chat_id) = crate::telegram::credentials()
-        .ok_or("Credenziali Telegram non configurate")?;
-
-    let log_path = crate::telegram::app_log_path(&app)
-        .ok_or("Nessun file di log trovato")?;
-
-    let caption = format!(
-        "FreschiTech - Log di diagnostica
-Invio manuale del {}",
-        chrono_now()
-    );
-
-    // `dispatch` esegue la richiesta fuori dal runtime tokio su cui Tauri
-    // invoca i comandi, dove `reqwest::blocking` andrebbe in panic.
-    crate::telegram::dispatch(move || {
-        crate::telegram::send_document(&token, &chat_id, &log_path, &caption)
-    })?
-}
-
-/// Invia il database al canale di diagnostica, **su richiesta esplicita**.
-///
-/// Il file contiene l'anagrafica completa dei clienti (P.IVA, codici fiscali,
-/// email, PEC, telefoni): per questo non viene mai allegato automaticamente ai
-/// report di errore, ma solo quando l'utente lo chiede dal pannello
-/// "Dati & Log".
-#[tauri::command]
-pub fn send_database_to_telegram() -> Result<(), String> {
-    log::info!("CMD [send_database_to_telegram]");
-
-    let (token, chat_id) = crate::telegram::credentials()
-        .ok_or("Credenziali Telegram non configurate")?;
-
-    let db_path = crate::db::get_db_path();
-    if !db_path.exists() {
-        return Err("Il file di database non esiste".to_string());
-    }
-
-    let caption = format!(
-        "FreschiTech - Database
-Invio manuale del {}",
-        chrono_now()
-    );
-
-    crate::telegram::dispatch(move || {
-        crate::telegram::send_document(&token, &chat_id, &db_path, &caption)
-    })?
-}
-
-/// Timestamp in formato ISO-8601 UTC, senza aggiungere una dipendenza da
-/// `chrono` solo per una didascalia.
-fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    // Delega la formattazione a SQLite, gia' presente e con supporto date.
-    get_connection()
-        .and_then(|conn| {
-            conn.query_row(
-                "SELECT strftime('%Y-%m-%d %H:%M:%S', ?1, 'unixepoch')",
-                [secs as i64],
-                |row| row.get::<_, String>(0),
-            )
-        })
-        .unwrap_or_else(|_| format!("timestamp {secs}"))
-}
+//
+// `get_backup_info`, `create_backup_now` e `send_log_to_telegram` vivono in
+// `tecno_core` e sono registrati in `lib.rs` come `get_backup_info`,
+// `backup_database` e `send_logs_to_developer`.
+//
+// `send_database_to_telegram` invece NON e' stato sostituito: e' sparito.
+// Spediva il file di database completo - anagrafiche, contatti, importi - a un
+// bot Telegram, a ogni panic e a ogni record di livello Error. La diagnostica
+// condivisa allega il solo file di log, che per costruzione riporta gli esiti
+// e mai i dati, e parte solo su richiesta esplicita dell'utente.
 
 // ==========================================
 // CATALOG MATERIALS (IMPORTAZIONE LISTINI)
@@ -1466,7 +1455,7 @@ impl CatalogMaterial {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_catalog_summary() -> Result<serde_json::Value, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     
@@ -1501,8 +1490,14 @@ pub fn get_catalog_summary() -> Result<serde_json::Value, String> {
     }))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_catalog_materials() -> Result<(), String> {
+    let esito = clear_catalog_materials_impl();
+    log_esito("clear_catalog_materials", &esito);
+    esito
+}
+
+fn clear_catalog_materials_impl() -> Result<(), String> {
     log::info!("CMD [clear_catalog_materials]");
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1516,7 +1511,7 @@ pub fn clear_catalog_materials() -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_catalog_materials(
     search: String,
     supplier: String,
@@ -1606,8 +1601,14 @@ pub fn get_catalog_materials(
     }))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_catalog_material(item: CatalogMaterial) -> Result<(), String> {
+    let esito = save_catalog_material_impl(item);
+    log_esito("save_catalog_material", &esito);
+    esito
+}
+
+fn save_catalog_material_impl(item: CatalogMaterial) -> Result<(), String> {
     log::info!("CMD [save_catalog_material] {}", log_target(item.id));
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1646,8 +1647,14 @@ pub fn save_catalog_material(item: CatalogMaterial) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_catalog_material(id: i64) -> Result<(), String> {
+    let esito = delete_catalog_material_impl(id);
+    log_esito("delete_catalog_material", &esito);
+    esito
+}
+
+fn delete_catalog_material_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_catalog_material] ID: {}", id);
     let result = (|| -> Result<(), String> {
         let conn = get_connection().map_err(|e| e.to_string())?;
@@ -1661,7 +1668,7 @@ pub fn delete_catalog_material(id: i64) -> Result<(), String> {
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search_catalog_materials(query: String) -> Result<Vec<CatalogMaterial>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let search_pattern = format!("%{}%", query);
@@ -1963,13 +1970,19 @@ pub fn parse_catalog_file(file_path: &str, limit: Option<usize>) -> Result<Vec<C
     Ok(imported_items)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_catalog_preview(file_path: String) -> Result<Vec<CatalogMaterial>, String> {
     parse_catalog_file(&file_path, Some(5))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_catalog_materials(file_path: String, clear_existing: bool) -> Result<usize, String> {
+    let esito = import_catalog_materials_impl(file_path, clear_existing);
+    log_esito("import_catalog_materials", &esito);
+    esito
+}
+
+fn import_catalog_materials_impl(file_path: String, clear_existing: bool) -> Result<usize, String> {
     log::info!("CMD [import_catalog_materials] file: {}, svuota_esistenti: {}", log_file_name(&file_path), clear_existing);
     let result = (|| -> Result<usize, String> {
         let imported_items = parse_catalog_file(&file_path, None)?;
@@ -2131,7 +2144,7 @@ fn parse_csv_line(line: &str, delimiter: char) -> Vec<String> {
     values
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search_suppliers(query: String) -> Result<Vec<String>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let search_pattern = format!("%{}%", query);
@@ -2195,7 +2208,7 @@ fn json_number(value: f64) -> serde_json::Value {
         .unwrap_or(serde_json::Value::Null)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_quotes() -> Result<Vec<serde_json::Value>, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare(
@@ -2224,8 +2237,14 @@ pub fn get_quotes() -> Result<Vec<serde_json::Value>, String> {
     Ok(quotes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_quote(quote: Quote, items: Vec<QuoteItem>) -> Result<i64, String> {
+    let esito = save_quote_impl(quote, items);
+    log_esito("save_quote", &esito);
+    esito
+}
+
+fn save_quote_impl(quote: Quote, items: Vec<QuoteItem>) -> Result<i64, String> {
     log::info!("CMD [save_quote] {} (client_id={}, {} voci)", log_target(quote.id), quote.client_id, items.len());
     let mut conn = get_connection().map_err(|e| e.to_string())?;
     
@@ -2259,7 +2278,7 @@ pub fn save_quote(quote: Quote, items: Vec<QuoteItem>) -> Result<i64, String> {
     Ok(quote_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_quote_details(quote_id: i64) -> Result<serde_json::Value, String> {
     let conn = get_connection().map_err(|e| e.to_string())?;
     
@@ -2322,8 +2341,14 @@ pub fn get_quote_details(quote_id: i64) -> Result<serde_json::Value, String> {
     Ok(serde_json::Value::Object(result))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_quote(id: i64) -> Result<(), String> {
+    let esito = delete_quote_impl(id);
+    log_esito("delete_quote", &esito);
+    esito
+}
+
+fn delete_quote_impl(id: i64) -> Result<(), String> {
     log::info!("CMD [delete_quote] ID: {}", id);
     let conn = get_connection().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM quotes WHERE id=?", [id]).map_err(|e| e.to_string())?;
@@ -2492,7 +2517,7 @@ fn extract_supplier_name(xml_content: &str) -> String {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn parse_invoice_xml(file_path: String) -> Result<XmlInvoiceParseResult, String> {
     log::info!("CMD [parse_invoice_xml] file: {}", log_file_name(&file_path));
     let xml_content = std::fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
@@ -2620,8 +2645,14 @@ pub fn parse_invoice_xml(file_path: String) -> Result<XmlInvoiceParseResult, Str
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -> Result<(), String> {
+    let esito = import_invoice_mappings_impl(mappings, supplier);
+    log_esito("import_invoice_mappings", &esito);
+    esito
+}
+
+fn import_invoice_mappings_impl(mappings: Vec<XmlMappingRow>, supplier: String) -> Result<(), String> {
     log::info!("CMD [import_invoice_mappings] count: {}, supplier: {}", mappings.len(), supplier);
     let mut conn = get_connection().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;

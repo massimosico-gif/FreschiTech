@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Plus, Search, User, Loader2, Euro, Trash2, Edit3, HardHat } from 'lucide-react'
 import EntityCard from './ui/EntityCard'
-import ConfirmModal from './ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import DrawerShell from './ui/DrawerShell'
+import { useToast } from '@tecno/ui/feedback'
 
 const Team = () => {
+  const toast = useToast()
   const [search, setSearch] = useState('')
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -70,7 +72,7 @@ const Team = () => {
       setIsDrawerOpen(false)
       loadEmployees()
     } catch (err) {
-      alert("Errore salvataggio: " + err)
+      toast.error("Errore salvataggio: " + err)
     }
   }
 
@@ -81,7 +83,7 @@ const Team = () => {
         setIsConfirmOpen(false)
         loadEmployees()
       } catch (err) {
-        alert("Errore eliminazione: " + err)
+        toast.error("Errore eliminazione: " + err)
       }
     }
   }

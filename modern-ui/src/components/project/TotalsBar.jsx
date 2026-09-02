@@ -1,6 +1,6 @@
 import React from 'react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
-import { formatEuro } from '../../utils/format'
+import { formatEuro } from '@tecno/ui'
 
 /**
  * Barra dei totali, fissa in fondo alla commessa.

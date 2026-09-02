@@ -5,7 +5,7 @@ import { ArrowRight, Check, HardHat, Package, Receipt, X } from 'lucide-react'
 import Kbd from './ui/Kbd'
 import DatePicker from './ui/DatePicker'
 import useAutocomplete from '../hooks/useAutocomplete'
-import { formatEuro } from '../utils/format'
+import { formatEuro } from '@tecno/ui'
 
 /**
  * Inserimento rapido, da qualunque schermata (Ctrl+N).

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Euro, Truck, Wrench, Percent, Save, Check } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import Card from '../ui/Card'
+import { useToast } from '@tecno/ui/feedback'
 
 const CcConfigTab = ({ costCenter, onSave }) => {
+  const toast = useToast()
   const [formData, setFormData] = useState({
     base_cost: 0,
     markup: 0.15,
@@ -96,7 +98,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error(err)
-      alert("Errore durante il salvataggio: " + err)
+      toast.error("Errore durante il salvataggio: " + err)
     } finally {
       setSaving(false)
     }

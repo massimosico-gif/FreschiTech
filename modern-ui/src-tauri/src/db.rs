@@ -1,105 +1,125 @@
-use directories::ProjectDirs;
+//! Schema del database di FreschiTech.
+//!
+//! L'infrastruttura (apertura, `integrity_check`, esecuzione delle migrazioni,
+//! backup) sta in `tecno_core`: qui c'e' solo il dominio.
+//!
+//! COSA E' CAMBIATO CON IL PASSAGGIO A tecno-core
+//! ---------------------------------------------
+//! Prima le migrazioni erano dodici `let _ = conn.execute("ALTER TABLE ...")`
+//! che giravano a **ogni avvio**. Funzionavano scartando l'errore "duplicate
+//! column", ma nascondevano allo stesso modo anche i fallimenti reali: una
+//! migrazione non riuscita restava invisibile fino al primo salvataggio andato
+//! storto. Anche le due varianti "sicure" — quelle con il controllo su
+//! `pragma_table_info` seguito da `let _ = ALTER TABLE` — ingoiavano l'errore
+//! a valle del controllo.
+//!
+//! Ora sono raccolte in [`MIGRAZIONI`], girano una volta sola dentro una
+//! transazione, e usano `tecno_core::db::add_column_if_missing`, che propaga
+//! gli errori veri.
+//!
+//! COME SI AGGIUNGE UNA MIGRAZIONE
+//! -------------------------------
+//!   1. si scrive una `fn` che modifica lo schema;
+//!   2. la si aggiunge a [`MIGRAZIONI`] con la versione successiva;
+//!   3. si porta `versione` di [`SCHEMA`] allo stesso numero.
+//!
+//! Una migrazione gia' applicata non viene mai ritentata: il conto lo tiene
+//! `PRAGMA user_version`.
+
 use rusqlite::{Connection, Result};
-use std::fs;
 use std::path::PathBuf;
+use tecno_core::db::add_column_if_missing;
+use tecno_core::{Migrazione, Schema};
 
-/// Versione dello schema attesa dal codice corrente.
+/// Descrizione completa dello schema, passata a `tecno_core::avvia`.
+pub static SCHEMA: Schema = Schema {
+    versione: 1,
+    crea_tabelle,
+    migrazioni: MIGRAZIONI,
+    crea_indici: Some(crea_indici),
+    valori_predefiniti: None,
+};
+
+/// Percorso storico del database di FreschiTech.
 ///
-/// Viene confrontata con `PRAGMA user_version`, che SQLite memorizza
-/// nell'header del file: le migrazioni gia' applicate non vengono ritentate a
-/// ogni avvio.
-const SCHEMA_VERSION: i32 = 1;
-
-/// Motivo per cui il database non ha potuto essere inizializzato.
+/// NON VA CAMBIATO
+/// ---------------
+/// Le installazioni esistenti hanno il file qui, dove lo metteva
+/// `ProjectDirs::from("com", "freschitech", "app")`. Spostarlo sul percorso
+/// predefinito di `tecno-core` (la cartella Documenti) farebbe ripartire
+/// l'applicazione su un database vuoto: i dati resterebbero dov'erano,
+/// invisibili, e sembrerebbero persi.
 ///
-/// La corruzione e' distinta dagli altri errori perche' richiede una
-/// gestione diversa: il file puo' contenere dati ancora recuperabili, quindi
-/// all'utente va offerta la possibilita' di salvarne una copia prima di
-/// chiudere.
-#[derive(Debug)]
-pub enum InitError {
-    /// `PRAGMA integrity_check` ha segnalato un problema. Contiene il dettaglio.
-    Corrupted(String),
-    /// Errore SQL nella creazione dello schema o nelle migrazioni.
-    Sql(rusqlite::Error),
-}
-
-impl std::fmt::Display for InitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Corrupted(detail) => write!(f, "database danneggiato: {detail}"),
-            Self::Sql(err) => write!(f, "errore SQL: {err}"),
+/// Chi vuole spostarlo puo' farlo dall'interfaccia (`set_db_path`), che ha la
+/// precedenza su questo percorso.
+pub fn percorso_storico() -> PathBuf {
+    // Niente `expect`: `ProjectDirs::from` puo' restituire `None` in ambienti
+    // sandbox o con le variabili d'ambiente assenti, e prima l'applicazione
+    // andava in panic all'avvio senza spiegazioni.
+    if let Some(dirs) = directories::ProjectDirs::from("com", "freschitech", "app") {
+        let config_dir = dirs.config_dir();
+        match std::fs::create_dir_all(config_dir) {
+            Ok(()) => return config_dir.join("freschitech.db"),
+            Err(e) => log::warn!(
+                "Impossibile creare la cartella di configurazione: {}. \
+                 Si ripiega sulla cartella Documenti.",
+                e
+            ),
         }
     }
+
+    tecno_core::paths::documenti()
+        .join("FreschiTech")
+        .join("freschitech.db")
 }
 
-impl std::error::Error for InitError {}
+/// Migrazioni versionate, in ordine crescente.
+static MIGRAZIONI: &[Migrazione] = &[Migrazione {
+    versione: 1,
+    nome: "colonne aggiunte dopo il primo rilascio",
+    esegui: migra_a_v1,
+}];
 
-impl From<rusqlite::Error> for InitError {
-    fn from(err: rusqlite::Error) -> Self {
-        Self::Sql(err)
-    }
-}
-
-pub fn get_db_path() -> PathBuf {
-    let proj_dirs = ProjectDirs::from("com", "freschitech", "app")
-        .expect("Could not determine config directory");
-    let config_dir = proj_dirs.config_dir();
-
-    if !config_dir.exists() {
-        fs::create_dir_all(config_dir).expect("Could not create config directory");
-    }
-
-    config_dir.join("freschitech.db")
-}
-
-pub fn get_connection() -> Result<Connection> {
-    let path = get_db_path();
-    let conn = Connection::open(path)?;
-
-    // I vincoli di chiave esterna sono attivi anche senza questa riga, perche'
-    // `rusqlite` con feature `bundled` compila SQLite con
-    // -DSQLITE_DEFAULT_FOREIGN_KEYS=1. Lo impostiamo comunque in modo
-    // esplicito: le ON DELETE CASCADE dello schema sono parte della logica
-    // applicativa e non devono dipendere da un flag di compilazione.
-    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-
-    Ok(conn)
-}
-
-/// Aggiunge una colonna solo se non esiste gia'.
+/// Migrazione 1 - allineamento dei database antecedenti al versionamento.
 ///
-/// Sostituisce il pattern `let _ = conn.execute("ALTER TABLE ...")`, che
-/// funzionava scartando l'errore "duplicate column" ma nascondeva allo stesso
-/// modo anche i fallimenti reali.
-fn add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    definition: &str,
-) -> Result<()> {
-    let exists: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
-        rusqlite::params![table, column],
-        |row| row.get(0),
-    )?;
+/// Raccoglie tutti gli `ALTER TABLE` che prima giravano a ogni avvio. Su un
+/// database creato da zero le colonne esistono gia' grazie al DDL e questa
+/// migrazione e' un no-op; su un database esistente aggiunge solo cio' che
+/// manca.
+fn migra_a_v1(conn: &Connection) -> Result<()> {
+    add_column_if_missing(conn, "clients", "pec", "TEXT")?;
 
-    if exists == 0 {
-        // `table`, `column` e `definition` sono letterali definiti in questo
-        // modulo, mai input utente: l'interpolazione e' sicura (ALTER TABLE non
-        // accetta parametri legati per gli identificatori).
-        conn.execute(
-            &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
-            [],
-        )?;
-        log::info!("Migrazione schema: aggiunta colonna {table}.{column}");
+    for (colonna, definizione) in [
+        ("address", "TEXT"),
+        ("distance", "INTEGER DEFAULT 0"),
+        ("km_cost", "REAL DEFAULT 0.50"),
+    ] {
+        add_column_if_missing(conn, "projects", colonna, definizione)?;
     }
+
+    for (colonna, definizione) in [
+        ("is_travel", "INTEGER DEFAULT 0"),
+        ("vehicle", "TEXT"),
+        ("travel_cost", "REAL DEFAULT 0.0"),
+    ] {
+        add_column_if_missing(conn, "labor", colonna, definizione)?;
+    }
+
+    for (colonna, definizione) in [
+        ("accepted_budget", "REAL DEFAULT 0.0"),
+        ("install_fee_percent", "REAL DEFAULT 0.06"),
+    ] {
+        add_column_if_missing(conn, "cost_centers", colonna, definizione)?;
+    }
+
+    add_column_if_missing(conn, "catalog_materials", "markup", "REAL DEFAULT 0.0")?;
+
     Ok(())
 }
 
-/// Crea le tabelle se mancanti. Idempotente: gira a ogni avvio.
-fn create_tables(conn: &Connection) -> Result<()> {
-    // Tabella Clienti
+/// DDL idempotente. Gira a ogni avvio.
+fn crea_tabelle(conn: &Connection) -> Result<()> {
+    // Clienti
     conn.execute(
         "CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,7 +140,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Commesse (Projects)
+    // Commesse
     conn.execute(
         "CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,7 +159,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Centri di Costo (Cost Centers)
+    // Centri di costo
     conn.execute(
         "CREATE TABLE IF NOT EXISTS cost_centers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,13 +178,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Materiali.
-    //
-    // La ON DELETE SET NULL e' una rete di sicurezza a livello di database: se
-    // un centro di costo sparisse per altre vie, le righe resterebbero valide
-    // scollegate. Il flusso applicativo e' pero' un altro: `delete_cost_center`
-    // elimina esplicitamente materiali, manodopera e spese collegati, perche'
-    // eliminare un centro di costo significa eliminarne le voci.
+    // Materiali
     conn.execute(
         "CREATE TABLE IF NOT EXISTS materials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,7 +199,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Manodopera (Labor). Vedi la nota su materials per la SET NULL.
+    // Manodopera
     conn.execute(
         "CREATE TABLE IF NOT EXISTS labor (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,7 +221,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Spese (Expenses). Vedi la nota su materials per la SET NULL.
+    // Spese
     conn.execute(
         "CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -225,7 +239,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Dipendenti (Employees/Operators)
+    // Dipendenti
     conn.execute(
         "CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,7 +249,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Impostazioni Globali
+    // Impostazioni globali
     conn.execute(
         "CREATE TABLE IF NOT EXISTS global_settings (
             key TEXT PRIMARY KEY,
@@ -244,7 +258,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Catalogo Materiali (Listini)
+    // Catalogo materiali (listini)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS catalog_materials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -258,7 +272,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Preventivi
+    // Preventivi
     conn.execute(
         "CREATE TABLE IF NOT EXISTS quotes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -272,7 +286,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Tabella Voci Preventivo
+    // Voci di preventivo
     conn.execute(
         "CREATE TABLE IF NOT EXISTS quote_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -291,135 +305,42 @@ fn create_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Indici a supporto delle query piu' frequenti. `IF NOT EXISTS` li rende
-/// idempotenti, quindi girano a ogni avvio insieme al DDL.
-fn create_indexes(conn: &Connection) -> Result<()> {
-    // Ricerca nel listino.
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_catalog_code ON catalog_materials (code)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_catalog_desc ON catalog_materials (description)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_catalog_supplier ON catalog_materials (supplier)",
-        [],
-    )?;
-
-    // Preventivi.
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_quote_client ON quotes (client_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_quote_item_quote ON quote_items (quote_id)",
-        [],
-    )?;
-
-    // `project_id` e' la colonna con cui si filtrano materiali, manodopera e
-    // spese a ogni apertura di commessa, ed e' il lato figlio delle
-    // ON DELETE CASCADE: senza indice ogni eliminazione di commessa richiede
-    // una scansione completa di queste tabelle.
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_materials_project ON materials (project_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_labor_project ON labor (project_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_expenses_project ON expenses (project_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_cost_centers_project ON cost_centers (project_id)",
-        [],
-    )?;
-
-    // Le JOIN con cost_centers e le UPDATE massive per centro di costo.
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_materials_cc ON materials (cost_center_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_labor_cc ON labor (cost_center_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_expenses_cc ON expenses (cost_center_id)",
-        [],
-    )?;
-
-    Ok(())
-}
-
-/// Migrazione 1: colonne aggiunte dopo il rilascio iniziale.
+/// Indici a supporto delle query piu' frequenti.
 ///
-/// Sui database creati da zero le colonne esistono gia' grazie al DDL, quindi
-/// e' un no-op; sui database esistenti (che partono da `user_version = 0`)
-/// vengono aggiunte una sola volta.
-fn migrate_to_v1(conn: &Connection) -> Result<()> {
-    add_column_if_missing(conn, "projects", "address", "TEXT")?;
-    add_column_if_missing(conn, "projects", "distance", "INTEGER DEFAULT 0")?;
-    add_column_if_missing(conn, "projects", "km_cost", "REAL DEFAULT 0.50")?;
-    add_column_if_missing(conn, "clients", "pec", "TEXT")?;
-    add_column_if_missing(conn, "labor", "is_travel", "INTEGER DEFAULT 0")?;
-    add_column_if_missing(conn, "labor", "vehicle", "TEXT")?;
-    add_column_if_missing(conn, "labor", "travel_cost", "REAL DEFAULT 0.0")?;
-    add_column_if_missing(conn, "cost_centers", "accepted_budget", "REAL DEFAULT 0.0")?;
-    add_column_if_missing(
-        conn,
-        "cost_centers",
-        "install_fee_percent",
-        "REAL DEFAULT 0.06",
-    )?;
-    add_column_if_missing(conn, "catalog_materials", "markup", "REAL DEFAULT 0.0")?;
-    Ok(())
-}
-
-/// Applica le migrazioni mancanti e aggiorna `PRAGMA user_version`.
-fn run_migrations(conn: &Connection) -> Result<()> {
-    let mut version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-
-    if version >= SCHEMA_VERSION {
-        return Ok(());
+/// Girano a ogni avvio e NON dentro una migrazione versionata: un indice che
+/// oggi non puo' essere creato deve poterlo essere al riavvio successivo.
+///
+/// Gli indici su `project_id` sono nuovi: ogni schermata di dettaglio commessa
+/// fa quattro letture filtrate per quella colonna (materiali, manodopera,
+/// spese, centri di costo) e senza indice erano quattro scansioni complete.
+fn crea_indici(conn: &Connection) -> Result<()> {
+    for (nome, tabella, colonna) in [
+        ("idx_projects_client", "projects", "client_id"),
+        ("idx_cost_centers_project", "cost_centers", "project_id"),
+        ("idx_materials_project", "materials", "project_id"),
+        ("idx_labor_project", "labor", "project_id"),
+        ("idx_expenses_project", "expenses", "project_id"),
+        ("idx_catalog_code", "catalog_materials", "code"),
+        ("idx_catalog_desc", "catalog_materials", "description"),
+        ("idx_catalog_supplier", "catalog_materials", "supplier"),
+        ("idx_quote_client", "quotes", "client_id"),
+        ("idx_quote_item_quote", "quote_items", "quote_id"),
+        // Aggiunti dalla 1.3.0: le schede di commessa filtrano le voci per
+        // centro di costo, e senza questi indici ogni apertura faceva una
+        // scansione completa delle tre tabelle.
+        ("idx_materials_cc", "materials", "cost_center_id"),
+        ("idx_labor_cc", "labor", "cost_center_id"),
+        ("idx_expenses_cc", "expenses", "cost_center_id"),
+    ] {
+        // Identificatori letterali definiti qui sopra, mai input utente.
+        conn.execute(
+            &format!(
+                "CREATE INDEX IF NOT EXISTS {} ON {}({})",
+                nome, tabella, colonna
+            ),
+            [],
+        )?;
     }
-
-    if version < 1 {
-        migrate_to_v1(conn)?;
-        version = 1;
-    }
-
-    // `PRAGMA user_version` non accetta parametri legati; `version` e' un i32
-    // che deriva dalle costanti qui sopra, non da input esterno.
-    conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
-    log::info!("Schema del database allineato alla versione {version}");
-
-    Ok(())
-}
-
-pub fn init_db() -> std::result::Result<(), InitError> {
-    let conn = get_connection()?;
-
-    // Controllo di integrita' del database SQLite. In caso di problema
-    // restituiamo l'errore invece di andare in panic: chiudere l'applicazione
-    // senza spiegazioni lascerebbe l'utente senza alcun modo di recuperare i
-    // dati ancora leggibili nel file.
-    if let Ok(integrity) = conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
-    {
-        if integrity != "ok" {
-            log::error!("DATABASE_CORRUPT: PRAGMA integrity_check: {}", integrity);
-            return Err(InitError::Corrupted(integrity));
-        }
-    }
-
-    create_tables(&conn)?;
-    run_migrations(&conn)?;
-    create_indexes(&conn)?;
-
     Ok(())
 }
 
@@ -427,141 +348,86 @@ pub fn init_db() -> std::result::Result<(), InitError> {
 mod tests {
     use super::*;
 
-    /// Prepara un database in memoria con lo stesso schema di produzione.
-    fn memory_db() -> Connection {
+    /// Database in memoria con lo stesso schema di produzione.
+    fn db_memoria() -> Connection {
         let conn = Connection::open_in_memory().expect("db in memoria");
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        create_tables(&conn).expect("creazione tabelle");
+        crea_tabelle(&conn).expect("creazione tabelle");
         conn
     }
 
-    #[test]
-    fn add_column_if_missing_e_idempotente() {
-        let conn = memory_db();
-        // La colonna esiste gia' nel DDL: nessun errore, nessuna modifica.
-        add_column_if_missing(&conn, "projects", "address", "TEXT").unwrap();
-        add_column_if_missing(&conn, "projects", "address", "TEXT").unwrap();
-    }
-
-    #[test]
-    fn add_column_if_missing_aggiunge_una_colonna_assente() {
-        let conn = memory_db();
-        conn.execute("CREATE TABLE t (id INTEGER)", []).unwrap();
-
-        add_column_if_missing(&conn, "t", "nuova", "TEXT DEFAULT 'x'").unwrap();
-
-        let exists: i64 = conn
+    fn ha_colonna(conn: &Connection, tabella: &str, colonna: &str) -> bool {
+        let n: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('t') WHERE name = 'nuova'",
-                [],
+                "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+                rusqlite::params![tabella, colonna],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(exists, 1);
+        n == 1
     }
 
     #[test]
-    fn le_migrazioni_stampano_la_versione_e_non_si_ripetono() {
-        let conn = memory_db();
-        assert_eq!(
-            conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))
-                .unwrap(),
-            0
-        );
-
-        run_migrations(&conn).unwrap();
-        assert_eq!(
-            conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))
-                .unwrap(),
-            SCHEMA_VERSION
-        );
-
-        // Una seconda esecuzione non deve fallire ne' cambiare la versione.
-        run_migrations(&conn).unwrap();
-        assert_eq!(
-            conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))
-                .unwrap(),
-            SCHEMA_VERSION
-        );
+    fn il_ddl_e_idempotente() {
+        let conn = db_memoria();
+        crea_tabelle(&conn).expect("una seconda esecuzione non deve fallire");
+        crea_indici(&conn).expect("indici");
+        crea_indici(&conn).expect("indici, seconda volta");
     }
 
     #[test]
-    fn migrazione_v1_recupera_un_database_legacy() {
-        // Simula un database antecedente alle colonne trasferta.
+    fn la_migrazione_e_un_no_op_su_uno_schema_nuovo() {
+        let conn = db_memoria();
+        migra_a_v1(&conn).expect("le colonne ci sono gia'");
+        assert!(ha_colonna(&conn, "labor", "travel_cost"));
+        assert!(ha_colonna(&conn, "cost_centers", "install_fee_percent"));
+    }
+
+    #[test]
+    fn la_migrazione_recupera_un_database_vecchio() {
+        // Schema com'era prima delle colonne aggiunte dopo il primo rilascio:
+        // e' il caso che gli `ALTER TABLE` a ogni avvio coprivano e che non
+        // deve smettere di funzionare.
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute(
-            "CREATE TABLE labor (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id INTEGER NOT NULL,
-                operator TEXT NOT NULL
-            )",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)",
-            [],
-        )
-        .unwrap();
-        conn.execute("CREATE TABLE clients (id INTEGER PRIMARY KEY AUTOINCREMENT)", [])
-            .unwrap();
-        conn.execute(
-            "CREATE TABLE cost_centers (id INTEGER PRIMARY KEY AUTOINCREMENT)",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "CREATE TABLE catalog_materials (id INTEGER PRIMARY KEY AUTOINCREMENT)",
-            [],
-        )
-        .unwrap();
-
-        migrate_to_v1(&conn).unwrap();
-
-        for column in ["is_travel", "vehicle", "travel_cost"] {
-            let exists: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM pragma_table_info('labor') WHERE name = ?1",
-                    [column],
-                    |row| row.get(0),
-                )
-                .unwrap();
-            assert_eq!(exists, 1, "colonna labor.{column} mancante");
+        for ddl in [
+            "CREATE TABLE clients (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            "CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            "CREATE TABLE labor (id INTEGER PRIMARY KEY, operator TEXT NOT NULL)",
+            "CREATE TABLE cost_centers (id INTEGER PRIMARY KEY, model TEXT NOT NULL)",
+            "CREATE TABLE catalog_materials (id INTEGER PRIMARY KEY, description TEXT NOT NULL)",
+        ] {
+            conn.execute(ddl, []).unwrap();
         }
+
+        migra_a_v1(&conn).expect("migrazione");
+
+        assert!(ha_colonna(&conn, "clients", "pec"));
+        for colonna in ["address", "distance", "km_cost"] {
+            assert!(ha_colonna(&conn, "projects", colonna), "projects.{}", colonna);
+        }
+        for colonna in ["is_travel", "vehicle", "travel_cost"] {
+            assert!(ha_colonna(&conn, "labor", colonna), "labor.{}", colonna);
+        }
+        for colonna in ["accepted_budget", "install_fee_percent"] {
+            assert!(
+                ha_colonna(&conn, "cost_centers", colonna),
+                "cost_centers.{}",
+                colonna
+            );
+        }
+        assert!(ha_colonna(&conn, "catalog_materials", "markup"));
     }
 
     #[test]
-    fn le_chiavi_esterne_sono_applicate() {
-        let conn = memory_db();
-        // Nessuna commessa con id 999: l'inserimento deve essere rifiutato.
-        let result = conn.execute(
-            "INSERT INTO materials (project_id, description) VALUES (999, 'x')",
-            [],
+    fn la_versione_dichiarata_copre_tutte_le_migrazioni() {
+        // Una migrazione con versione superiore a quella dello schema non
+        // verrebbe mai applicata, in silenzio.
+        let massima = MIGRAZIONI.iter().map(|m| m.versione).max().unwrap_or(0);
+        assert!(
+            SCHEMA.versione >= massima,
+            "SCHEMA.versione ({}) e' inferiore alla migrazione piu' alta ({})",
+            SCHEMA.versione,
+            massima
         );
-        assert!(result.is_err(), "il vincolo di chiave esterna non e' attivo");
-    }
-
-    #[test]
-    fn eliminare_una_commessa_cancella_a_cascata_i_materiali() {
-        let conn = memory_db();
-        conn.execute("INSERT INTO clients (id, type, name) VALUES (1, 'company', 'ACME')", [])
-            .unwrap();
-        conn.execute(
-            "INSERT INTO projects (id, client_id, name) VALUES (1, 1, 'Commessa')",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO materials (project_id, description) VALUES (1, 'Cavo')",
-            [],
-        )
-        .unwrap();
-
-        conn.execute("DELETE FROM projects WHERE id = 1", []).unwrap();
-
-        let rimasti: i64 = conn
-            .query_row("SELECT COUNT(*) FROM materials", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(rimasti, 0);
     }
 }

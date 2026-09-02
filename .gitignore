@@ -48,3 +48,35 @@ __pycache__/
 # La .pub non e' segreta, ma vive gia' dentro tauri.conf.json.
 *.key
 *.key.pub
+# ---------------------------------------------------------------------------
+# SEGRETI — non devono MAI finire nel repository
+# (letti da build.rs e incorporati nel binario, vedi CLAUDE.md)
+# ---------------------------------------------------------------------------
+GitHubToken.env
+# Qualunque variante, non solo il nome esatto: generando una chiave come
+# `signing_key_nuova.txt` si otterrebbe un file NON ignorato con dentro una
+# chiave privata, in un repository pubblico.
+signing_key*.txt
+signing_key*.txt.pub
+modern-ui/src-tauri/secrets/
+db_key
+diagnostics.json
+
+# ---------------------------------------------------------------------------
+# DATI REALI DEI CLIENTI
+# Il database contiene ragioni sociali, partite IVA, indirizzi e importi.
+# ---------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------------------------------------------------------------
+# PACCHETTI DI RELEASE (vanno pubblicati come asset, non versionati)
+# ---------------------------------------------------------------------------
+*.tar.gz
+*.tar.gz.sig
+*.dmg
+
+# Artefatti Python degli script di release
+__pycache__/
+*.pyc

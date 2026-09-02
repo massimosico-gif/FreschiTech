@@ -24,7 +24,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import Card from './ui/Card'
-import ConfirmModal from './ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import DrawerShell from './ui/DrawerShell'
 import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
@@ -1208,8 +1208,8 @@ const Quotes = () => {
           onConfirm={handleDeleteQuote}
           title="Elimina Preventivo"
           message="Sei sicuro di voler eliminare definitivamente questo preventivo? L'azione è irreversibile e rimuoverà anche tutte le righe ad esso associate."
-          confirmText="Elimina"
-          cancelText="Annulla"
+          confirmLabel="Elimina"
+          cancelLabel="Annulla"
           type="danger"
         />
 
@@ -1220,8 +1220,8 @@ const Quotes = () => {
           onConfirm={handleConfirmRemoveItem}
           title="Rimuovi Articolo"
           message="Sei sicuro di voler rimuovere questo articolo dal preventivo? Questa azione salverà le modifiche al database immediatamente."
-          confirmText="Rimuovi"
-          cancelText="Annulla"
+          confirmLabel="Rimuovi"
+          cancelLabel="Annulla"
           type="danger"
         />
 
@@ -1523,8 +1523,8 @@ const Quotes = () => {
         onConfirm={handleDeleteQuote}
         title="Elimina Preventivo"
         message="Sei sicuro di voler eliminare definitivamente questo preventivo? L'azione è irreversibile e rimuoverà anche tutte le righe ad esso associate."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
 

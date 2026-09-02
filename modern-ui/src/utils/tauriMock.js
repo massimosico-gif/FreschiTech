@@ -528,10 +528,9 @@ export async function invoke(commandName, args = {}) {
         keep: 7,
         latest: null
       };
-    case 'create_backup_now':
+    case 'backup_database':
       throw new Error("Backup non disponibile nell'anteprima web");
-    case 'send_log_to_telegram':
-    case 'send_database_to_telegram':
+    case 'send_logs_to_developer':
       throw new Error("Invio diagnostica non disponibile nell'anteprima web");
     case 'export_database':
       throw new Error("Esportazione non disponibile nell'anteprima web");
