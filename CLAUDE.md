@@ -211,9 +211,15 @@ TauriKit è il passo successivo, ma prima va tolto il caricamento dei font da Go
 `release_manager_windows.py`, su un repository **pubblico**, protetta da una password vuota:
 chiunque poteva leggerla e firmare un pacchetto che tutte le installazioni accettano come autentico.
 Ora la legge `signing_key.py` da `signing_key.txt`, non versionato — ma **resta nella storia di git**
-dal commit `8f566bf`, quindi spostarla non la rende segreta. Le istruzioni per rigenerarla, e il suo
-costo (le installazioni esistenti rifiuteranno gli aggiornamenti firmati con la nuova chiave e
-andranno reinstallate una volta), sono in cima a `signing_key.py`.
+dal commit `8f566bf`, quindi spostarla non la rende segreta.
+
+Da sola però la chiave non basta a consegnare un aggiornamento falso: serve anche poter cambiare cosa
+serve il Gist, e quello richiede l'accesso all'account GitHub. Il difetto è che la sicurezza dei
+client poggia su **una** serratura invece che su due.
+
+**La rotazione non richiede di reinstallare sui computer dei clienti**: si pubblica una release
+"ponte" che contiene la chiave pubblica nuova ma è firmata con quella vecchia, e da lì in poi i
+client si fidano della nuova. La procedura completa è in cima a `signing_key.py`.
 
 **La diagnostica non deve mai spedire dati.** Una versione precedente caricava su Telegram il file
 di database completo — a ogni panic e a ogni record di livello `Error` — e teneva il token del bot
