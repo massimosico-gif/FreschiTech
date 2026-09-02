@@ -2,15 +2,6 @@ use serde::{Deserialize, Serialize};
 use tecno_core::db::get_connection;
 use tecno_core::log_esito;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Municipality {
-    pub nome: String,
-    pub cap: Vec<String>,
-    pub sigla: String,
-}
-
-const COMUNI_JSON: &str = include_str!("../data/comuni.json");
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
     pub id: Option<i64>,
@@ -395,19 +386,6 @@ pub fn get_stats() -> serde_json::Value {
         "utile_effettivo": utile_effettivo,
         "chart_data": chart_data
     })
-}
-
-#[tauri::command(async)]
-pub fn search_municipalities(query: String) -> Result<Vec<Municipality>, String> {
-    let comuni: Vec<Municipality> = serde_json::from_str(COMUNI_JSON).map_err(|e| e.to_string())?;
-    let query_lower = query.to_lowercase();
-    
-    let filtered: Vec<Municipality> = comuni.into_iter()
-        .filter(|m| m.nome.to_lowercase().starts_with(&query_lower))
-        .take(10)
-        .collect();
-        
-    Ok(filtered)
 }
 
 impl Client {

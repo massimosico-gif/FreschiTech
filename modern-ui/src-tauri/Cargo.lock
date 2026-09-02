@@ -4328,11 +4328,12 @@ dependencies = [
 [[package]]
 name = "tecno-core"
 version = "0.1.0"
-source = "git+https://github.com/massimosico-gif/TauriKit#0b536f4bd9e91ca5d0c55e1facd906a7630fa4d2"
+source = "git+https://github.com/massimosico-gif/TauriKit#fc772ef8a89fdbb088fe915a180b0f6a0427db7a"
 dependencies = [
  "chrono",
  "directories",
  "log",
+ "once_cell",
  "reqwest",
  "rusqlite",
  "serde",
@@ -4345,7 +4346,7 @@ dependencies = [
 [[package]]
 name = "tecno-core-build"
 version = "0.1.0"
-source = "git+https://github.com/massimosico-gif/TauriKit#0b536f4bd9e91ca5d0c55e1facd906a7630fa4d2"
+source = "git+https://github.com/massimosico-gif/TauriKit#fc772ef8a89fdbb088fe915a180b0f6a0427db7a"
 
 [[package]]
 name = "tempfile"
