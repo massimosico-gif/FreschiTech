@@ -45,10 +45,9 @@ PDF esempio (eliminare a test finiti)
 # (letti da build.rs e incorporati nel binario, vedi CLAUDE.md)
 # ---------------------------------------------------------------------------
 GitHubToken.env
-# Qualunque variante, non solo il nome esatto: generando la chiave nuova come
-# `signing_key_nuova.txt` si sarebbe ottenuto un file NON ignorato contenente
-# una chiave privata, in un repository pubblico. Cioe' di nuovo il difetto che
-# la rotazione sta correggendo.
+# Qualunque variante, non solo il nome esatto: generando una chiave come
+# `signing_key_nuova.txt` si otterrebbe un file NON ignorato con dentro una
+# chiave privata, in un repository pubblico.
 signing_key*.txt
 signing_key*.txt.pub
 modern-ui/src-tauri/secrets/

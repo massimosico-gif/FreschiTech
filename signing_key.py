@@ -12,45 +12,20 @@ E' la chiave che corrisponde alla `pubkey` dichiarata in `tauri.conf.json`. Chi
 la possiede puo' firmare un pacchetto che TUTTE le copie gia' installate di
 FreschiTech accettano come autentico e installano da sole.
 
-TOGLIERLA DA QUI NON LA RENDE SEGRETA
--------------------------------------
+ATTENZIONE: TOGLIERLA DA QUI NON LA RENDE SEGRETA
+-------------------------------------------------
 Resta nella storia di git, su un repository pubblico, dal commit 8f566bf.
-Chiunque l'abbia gia' clonato ce l'ha, e la rotazione e' l'unica correzione
-vera.
+Chiunque l'abbia gia' clonato ce l'ha. **La chiave va rigenerata**, e questa
+e' l'unica correzione vera; spostarla e' solo il primo passo.
 
-Da sola pero' la chiave non basta a consegnare un aggiornamento falso: serve
-anche poter cambiare cosa serve il Gist dichiarato in `tauri.conf.json`, e
-quello richiede l'accesso all'account GitHub. Il difetto e' che oggi la
-sicurezza dei client poggia su una serratura sola invece che su due.
+Rigenerarla ha un costo da mettere in conto: le installazioni esistenti hanno
+la vecchia `pubkey` incorporata e RIFIUTERANNO gli aggiornamenti firmati con la
+nuova. Serve una reinstallazione manuale sui computer dei clienti, una volta.
 
-COME SI RUOTA SENZA REINSTALLARE SUI COMPUTER DEI CLIENTI
----------------------------------------------------------
-La chiave pubblica e' compilata dentro l'applicazione, quindi un client
-installato verifica con quella che aveva quando e' stato installato. Basta
-sfruttarlo: si pubblica UNA release "ponte" che contiene la chiave pubblica
-nuova ma e' firmata con quella VECCHIA.
+    npx tauri signer generate -w signing_key.txt
 
-    client vN     ha pubkey VECCHIA
-        scarica vN+1, firmata con la chiave VECCHIA  -> accetta
-    client vN+1   ora ha pubkey NUOVA, era nel pacchetto
-        scarica vN+2, firmata con la chiave NUOVA    -> accetta
-
-L'ordine e' quindi:
-
-  1. `cd modern-ui && npx tauri signer generate -w ~/chiave_nuova.txt`
-     (senza -p: la password la chiede, e non finisce nella cronologia della
-     shell. Metterne una VERA: quella storica era vuota, ed e' meta' del
-     problema);
-  2. la pubblica stampata va in `tauri.conf.json`, `plugins.updater.pubkey`;
-  3. si pubblica la release ponte con `signing_key.txt` ANCORA VECCHIA;
-  4. solo dopo si sostituisce `signing_key.txt` con quella nuova, e si mette la
-     password in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` dentro un `.env` non
-     versionato - `_firma` la legge gia' da li';
-  5. dalla release successiva si firma con la nuova.
-
-Resta scoperto un solo caso: un client che SALTA la release ponte rimane con la
-chiave vecchia e rifiutera' tutto cio' che viene dopo. Se i clienti sono pochi,
-verificare che l'abbiano presa prima di firmare con la nuova.
+poi la chiave pubblica stampata va in `tauri.conf.json`, sotto
+`plugins.updater.pubkey`.
 
 DOVE VIENE CERCATA
 ------------------
