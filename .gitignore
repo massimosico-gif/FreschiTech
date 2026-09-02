@@ -64,3 +64,7 @@ diagnostics.json
 *.tar.gz
 *.tar.gz.sig
 *.dmg
+
+# Artefatti Python degli script di release
+__pycache__/
+*.pyc

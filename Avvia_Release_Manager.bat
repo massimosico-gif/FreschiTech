@@ -22,6 +22,6 @@ python release_manager_windows.py
 if %errorlevel% neq 0 (
     echo.
     echo [ERRORE] Si è verificato un problema durante l'avvio.
-    echo Assicurati di aver installato le dipendenze con: pip install pywebview requests
+    echo Assicurati di aver installato le dipendenze con: pip install pywebview requests "git+https://github.com/massimosico-gif/TauriKit#subdirectory=core/tecno-release"
     pause
 )
