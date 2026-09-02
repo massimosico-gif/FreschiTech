@@ -1,13 +1,30 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity } from 'lucide-react'
+import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity, Pencil, Trash2 } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
 import Select from '../ui/Select'
 import { ConfirmModal } from '@tecno/ui/feedback'
+import ViewToggle from '../ui/ViewToggle'
+import { formatEuro } from '@tecno/ui'
+
+/** Oltre questa soglia l'elenco compatto diventa il predefinito. */
+const SOGLIA_ELENCO = 8
 
 const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) => {
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
   const [ccToDeleteId, setCcToDeleteId] = useState(null)
+
+  // La scelta esplicita di chi lavora vince sempre; senza una scelta, la
+  // forma la decide la quantita': poche voci si sfogliano, molte si leggono.
+  const [viewMode, setViewMode] = useState(
+    () => localStorage.getItem('cc_view_mode')
+      || (costCenters.length > SOGLIA_ELENCO ? 'list' : 'cards')
+  )
+
+  const chooseView = (mode) => {
+    localStorage.setItem('cc_view_mode', mode)
+    setViewMode(mode)
+  }
 
   const initialFilters = {
     search: '',
@@ -53,18 +70,21 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
             {filteredData.length} entità {filteredData.length !== costCenters.length ? '(filtrate)' : ''}
           </p>
         </div>
-        <button 
-          onClick={onAdd}
-          className="bg-accent text-white px-8 py-4 rounded-2xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 flex items-center gap-2"
-        >
-          <Plus size={18} /> Nuovo Centro
-        </button>
+        <div className="flex items-center gap-3">
+          <ViewToggle mode={viewMode} onChange={chooseView} />
+          <button
+            onClick={onAdd}
+            className="bg-accent text-white px-8 py-4 rounded-2xl text-[0.72rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 flex items-center gap-2 cursor-pointer"
+          >
+            <Plus size={18} /> Nuovo Centro
+          </button>
+        </div>
       </div>
 
       {/* Toolbar Filtri CC */}
       <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
         <div className="flex-1 w-full space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Robot / Area</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Robot / Area</label>
           <div className="relative group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent transition-colors" size={18} />
             <input 
@@ -78,7 +98,7 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
         </div>
         
         <div className="w-full lg:w-64 space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Categoria</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Categoria</label>
           <Select 
             options={categoryOptions}
             value={filters.category}
@@ -102,10 +122,100 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
         </button>
       </div>
 
-      {filteredData.length > 0 ? (
+      {filteredData.length > 0 && viewMode === 'list' && (
+        <div className="relative z-10 bg-white/60 backdrop-blur-md border border-white/60 rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[46rem]">
+              <thead>
+                <tr className="border-b border-slate-200/70">
+                  {['Centro di costo', 'Categoria', 'Preventivo', 'Costo base', 'Differenza', ''].map((head, idx) => (
+                    <th
+                      key={head || idx}
+                      className={`px-6 py-3.5 text-[0.7rem] font-black uppercase tracking-widest text-slate-500 ${
+                        idx >= 2 && idx <= 4 ? 'text-right' : 'text-left'
+                      }`}
+                    >
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.map(cc => {
+                  const preventivo = cc.accepted_budget || 0
+                  const costo = cc.base_cost || 0
+                  const differenza = preventivo - costo
+                  return (
+                    <tr
+                      key={cc.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Apri ${cc.model}`}
+                      onClick={() => onClickCard && onClickCard(cc.id)}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onClickCard && onClickCard(cc.id)
+                        }
+                      }}
+                      className="border-b border-slate-100/80 last:border-0 hover:bg-white transition-colors cursor-pointer focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/20"
+                    >
+                      <td className="px-6 py-3.5">
+                        <span className="block text-[0.9rem] font-bold text-slate-800">{cc.model}</span>
+                        <span className="block text-[0.75rem] font-semibold text-slate-500">
+                          {cc.brand || 'Marca non specificata'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <span className="inline-block px-3 py-1 rounded-full bg-sky-50 text-sky-600 text-[0.72rem] font-bold">
+                          {cc.category || 'Senza categoria'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5 text-right text-[0.85rem] font-bold text-slate-700 tabular-nums">
+                        {formatEuro(preventivo)}
+                      </td>
+                      <td className="px-6 py-3.5 text-right text-[0.85rem] font-bold text-slate-700 tabular-nums">
+                        {formatEuro(costo)}
+                      </td>
+                      <td className={`px-6 py-3.5 text-right text-[0.85rem] font-black tabular-nums ${
+                        differenza < 0 ? 'text-rose-600' : 'text-emerald-600'
+                      }`}>
+                        {formatEuro(differenza)}
+                      </td>
+                      <td className="px-6 py-3.5 text-right whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onEdit(cc) }}
+                          title="Modifica"
+                          className="p-2 rounded-lg text-slate-400 hover:text-accent hover:bg-slate-50 transition-colors"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCcToDeleteId(cc.id)
+                            setIsConfirmDeleteOpen(true)
+                          }}
+                          title="Elimina"
+                          className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {filteredData.length > 0 && viewMode === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 relative z-10">
           {filteredData.map(cc => (
-            <EntityCard 
+            <EntityCard
               key={cc.id}
               icon={<Target size={24} />}
               title={cc.model}
@@ -126,8 +236,10 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
             />
           ))}
         </div>
-      ) : (
-        <div className="bg-white/40 backdrop-blur-md border border-white/50 rounded-[3rem] p-32 text-center">
+      )}
+
+      {filteredData.length === 0 && (
+        <div className="bg-white/40 backdrop-blur-md border border-white/50 rounded-[3rem] p-20 text-center">
           <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 text-slate-200">
             <Target size={48} />
           </div>

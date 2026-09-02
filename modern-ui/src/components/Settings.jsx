@@ -49,7 +49,7 @@ const Settings = () => {
         <aside className="w-full lg:w-72 bg-white/40 backdrop-blur-md border border-white/60 rounded-[2.5rem] p-6 shadow-xl space-y-6 shrink-0">
           {groups.map((group, gIdx) => (
             <div key={gIdx} className="space-y-2">
-              <h4 className="text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.2em] px-3">{group.title}</h4>
+              <h4 className="text-[0.72rem] font-black text-slate-400 uppercase tracking-[0.2em] px-3">{group.title}</h4>
               <div className="space-y-1">
                 {group.items.map(item => {
                   const isActive = activeTab === item.id
@@ -57,7 +57,7 @@ const Settings = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[0.68rem] font-black uppercase tracking-wider transition-all duration-300 ${
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[0.75rem] font-black uppercase tracking-wider transition-all duration-300 ${
                         isActive 
                         ? 'bg-slate-900 text-white shadow-lg shadow-black/10' 
                         : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'

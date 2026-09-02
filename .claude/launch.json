@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "freschitech-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:web", "--prefix", "modern-ui"],
+      "port": 3000
+    }
+  ]
+}

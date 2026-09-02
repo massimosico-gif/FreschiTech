@@ -158,7 +158,7 @@ const ResourcesSettings = () => {
           status.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-50 text-red-600 border border-red-100'
         }`}>
           {status.type === 'success' ? <CheckCircle2 size={20} className="text-green-400" /> : <AlertCircle size={20} />}
-          <span className="text-[0.65rem] font-black uppercase tracking-widest">{status.message}</span>
+          <span className="text-[0.75rem] font-black uppercase tracking-widest">{status.message}</span>
         </div>
       )}
 
@@ -224,7 +224,7 @@ const ResourcesSettings = () => {
       >
         <form onSubmit={handleSave} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Nome Mezzo / Furgone</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400 ml-1">Nome Mezzo / Furgone</label>
             <input 
               required
               name="name"
@@ -235,7 +235,7 @@ const ResourcesSettings = () => {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Chilometrico Standard (€/km)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400 ml-1">Costo Chilometrico Standard (€/km)</label>
             <input 
               required
               type="number"

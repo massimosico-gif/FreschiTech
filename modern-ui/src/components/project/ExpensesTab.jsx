@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { 
   Plus, 
@@ -24,10 +24,9 @@ import MultiSelect from '../ui/MultiSelect'
 import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
 import { ConfirmModal } from '@tecno/ui/feedback'
-import { useToast } from '@tecno/ui/feedback'
+import Kbd from '../ui/Kbd'
 
 const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = null, projectId = null, onSave = null }) => {
-  const toast = useToast()
   // Brand Configuration (Centralized Color)
   const brandColor = 'accent'; // Lely Red
   
@@ -65,6 +64,9 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
   }), [projectId, defaultCostCenterId])
 
   const [newExpenseData, setNewExpenseData] = useState(initialExpenseData)
+
+  // Primo campo del box: il fuoco ci torna dopo ogni salvataggio.
+  const boxFirstFieldRef = useRef(null)
   const [isBoxOpen, setIsBoxOpen] = useState(() => {
     const val = localStorage.getItem('expenses_box_open')
     return val !== 'false'
@@ -135,7 +137,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
       }
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo operatore:", err)
-      toast.error("Impossibile salvare il nuovo operatore: " + err)
+      alert("Impossibile salvare il nuovo operatore: " + err)
     }
   }
 
@@ -165,7 +167,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
       setNewExpenseData(prev => ({ ...prev, phase: trimmed }))
     } catch (err) {
       console.error("Errore nel salvataggio della nuova fase:", err)
-      toast.error("Impossibile salvare la nuova fase: " + err)
+      alert("Impossibile salvare la nuova fase: " + err)
     }
   }
 
@@ -202,8 +204,28 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
         amount: 0,
         markup: 0.00
       }))
+      // Centro di costo, fase e data restano: il fuoco torna sulla
+      // descrizione, pronto per lo scontrino successivo.
+      boxFirstFieldRef.current?.focus()
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  /** Tastiera del box: Invio salva, Esc svuota i campi variabili. */
+  const handleBoxKeyDown = (e) => {
+    if (e.defaultPrevented) return
+
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+      e.preventDefault()
+      if (!isAddDisabled) handleAddNewExpenseFromBox()
+      return
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setNewExpenseData(prev => ({ ...prev, description: '', supplier: '', amount: 0 }))
+      boxFirstFieldRef.current?.focus()
     }
   }
 
@@ -295,13 +317,19 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
       {/* Box Aggiunta Spesa Persistente */}
       {onSave && isBoxOpen && (
-        <div className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
+        <div onKeyDown={handleBoxKeyDown} className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
                 <Plus size={14} className="stroke-[3]" />
               </div>
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-500">Nuova Registrazione Spesa</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest text-slate-500">Nuova Registrazione Spesa</span>
+              <span className="hidden lg:flex items-center gap-1.5 ml-3 text-slate-400">
+                <Kbd>Invio</Kbd>
+                <span className="text-[0.7rem] font-semibold">salva</span>
+                <Kbd>Esc</Kbd>
+                <span className="text-[0.7rem] font-semibold">svuota</span>
+              </span>
             </div>
             <div className="flex items-center gap-4">
               {/* Riepilogo economico dell'aggiunta */}
@@ -311,7 +339,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
                 const totalSale = amount * (1 + markup);
                 return (
                   <div className="text-right">
-                    <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
+                    <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
                     <span className="text-sm font-black text-slate-800">
                       € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                     </span>
@@ -331,7 +359,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
           <div className="relative z-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
             {/* Operatori coinvolti */}
             <div className="lg:col-span-3 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Operatori coinvolti</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Operatori coinvolti</label>
               <MultiSelect 
                 options={employeeOptions}
                 selectedValues={selectedEmployeeIds}
@@ -345,9 +373,10 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Descrizione / Tipo Spesa * */}
             <div className="lg:col-span-3 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione / Tipo Spesa *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Descrizione / Tipo Spesa *</label>
               <input 
                 type="text" 
+                ref={boxFirstFieldRef}
                 placeholder="Es: Pranzo, Hotel, Carburante..."
                 value={newExpenseData.description}
                 onChange={(e) => setNewExpenseData(p => ({ ...p, description: e.target.value }))}
@@ -359,7 +388,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Fornitore / Nota */}
             <div className="lg:col-span-4 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Fornitore / Nota</label>
               <input 
                 type="text" 
                 placeholder="Nome locale o esercente..."
@@ -373,7 +402,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Data */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data Spesa</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data Spesa</label>
               <DatePicker 
                 compact={true}
                 value={newExpenseData.date}
@@ -386,7 +415,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
             {/* Centro di Costo (se non è predefinito) */}
             {!defaultCostCenterId ? (
               <div className="lg:col-span-4 space-y-1.5">
-                <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
                 <select
                   value={newExpenseData.cost_center_id || ''}
                   onChange={(e) => setNewExpenseData(p => ({ ...p, cost_center_id: e.target.value ? parseInt(e.target.value) : null }))}
@@ -402,7 +431,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Ambito (Fase) */}
             <div className={`${!defaultCostCenterId ? 'lg:col-span-4' : 'lg:col-span-6'} space-y-1.5`}>
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
               <PhaseSelector
                 phases={inlinePhaseOptions}
                 value={newExpenseData.phase}
@@ -415,7 +444,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Importo (€) */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Importo *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Importo *</label>
               <input 
                 type="number" 
                 step="0.01"
@@ -431,7 +460,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
             {/* Ricarico (%) */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric. %</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric. %</label>
               <input 
                 type="number"
                 step="1"
@@ -449,7 +478,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
               <button 
                 onClick={handleAddNewExpenseFromBox}
                 disabled={isAddDisabled}
-                className={`w-full py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
+                className={`w-full py-2 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
                   isAddDisabled 
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
                     : 'bg-accent text-white hover:bg-accent/90 shadow-md shadow-accent/15'
@@ -465,7 +494,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
       {/* Toolbar Filtri Spese */}
       <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
         <div className="flex-1 w-full space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Spesa / Fornitore</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Spesa / Fornitore</label>
           <div className="relative group">
             <Search className={`absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-${brandColor} transition-colors`} size={18} />
             <input 
@@ -479,7 +508,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
         </div>
         
         <div className="w-full lg:w-64 space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
           <Select 
             options={phaseOptions}
             value={filters.phase}
@@ -491,7 +520,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
 
         {!defaultCostCenterId && (
           <div className="w-full lg:w-64 space-y-2">
-            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
+            <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
             <Select 
               options={ccOptions}
               value={filters.cc}
@@ -521,30 +550,30 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50">
-                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Descrizione <SortIcon field="description" /></div>
                 </th>
-                <th onClick={() => handleSort('supplier')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('supplier')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Fornitore <SortIcon field="supplier" /></div>
                 </th>
                 {!defaultCostCenterId && (
-                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                     <div className="flex items-center gap-2">Centro di Costo <SortIcon field="cost_center" /></div>
                   </th>
                 )}
-                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Ambito <SortIcon field="phase" /></div>
                 </th>
-                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Data <SortIcon field="date" /></div>
                 </th>
-                <th onClick={() => handleSort('amount')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('amount')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Importo <SortIcon field="amount" /></div>
                 </th>
-                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Tot. Vendita <SortIcon field="total" /></div>
                 </th>
-                <th className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
+                <th className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -570,7 +599,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
                         <div className={`p-2 rounded-lg ${ex.cost_center_id ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-300'}`}>
                           <Target size={14} />
                         </div>
-                        <span className={`text-[0.65rem] font-black uppercase tracking-tight ${ex.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
+                        <span className={`text-[0.75rem] font-black uppercase tracking-tight ${ex.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
                           {ex.cost_center_name || 'Generale'}
                         </span>
                       </div>
@@ -581,7 +610,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
                       <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
                         <Layers size={14} />
                       </div>
-                      <span className="text-[0.65rem] font-black text-slate-800 uppercase tracking-tight">
+                      <span className="text-[0.75rem] font-black text-slate-800 uppercase tracking-tight">
                         {ex.phase || 'Generale'}
                       </span>
                     </div>
@@ -601,7 +630,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
                         € {(ex.amount * (1 + ex.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </p>
                       {ex.markup > 0 && (
-                        <p className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">
+                        <p className="text-[0.7rem] font-black text-emerald-500 uppercase tracking-widest">
                           Ric. {(ex.markup * 100).toFixed(0)}%
                         </p>
                       )}
@@ -641,7 +670,7 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
                       {hasActiveFilters && (
                         <button 
                           onClick={() => setFilters(initialFilters)}
-                          className={`mt-4 text-${brandColor} font-black uppercase tracking-[0.2em] text-[0.6rem] hover:tracking-[0.3em] transition-all`}
+                          className={`mt-4 text-${brandColor} font-black uppercase tracking-[0.2em] text-[0.72rem] hover:tracking-[0.3em] transition-all`}
                         >
                           Resetta Filtri
                         </button>

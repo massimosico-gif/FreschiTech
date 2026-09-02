@@ -247,7 +247,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ragione Sociale / Nome Completo *</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ragione Sociale / Nome Completo *</label>
             <div className="relative">
                <Building2 className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
                <input 
@@ -258,7 +258,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
                 placeholder="Es: Lely Italia S.r.l." 
               />
             </div>
-            {errors.name && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
+            {errors.name && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
           </div>
         </section>
 
@@ -271,7 +271,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Partita IVA</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Partita IVA</label>
               <div className="relative">
                  <Hash className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.vat_id ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
                  <input 
@@ -282,10 +282,10 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
                   placeholder="11 cifre" 
                 />
               </div>
-              {errors.vat_id && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.vat_id}</p>}
+              {errors.vat_id && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.vat_id}</p>}
             </div>
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice Fiscale</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Codice Fiscale</label>
               <div className="relative">
                  <Hash className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${errors.tax_code ? 'text-rose-500' : 'text-slate-400'}`} size={18} />
                  <input 
@@ -296,13 +296,13 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
                   placeholder="Codice Fiscale" 
                 />
               </div>
-              {errors.tax_code && <p className="text-[0.6rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.tax_code}</p>}
+              {errors.tax_code && <p className="text-[0.72rem] font-bold text-rose-500 ml-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.tax_code}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Email</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Email</label>
               <div className="relative">
                  <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                  <input 
@@ -315,7 +315,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">PEC</label>
+              <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">PEC</label>
               <div className="relative">
                  <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                  <input 
@@ -338,7 +338,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           </div>
           
           <div className="space-y-2 relative">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Completo</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Indirizzo Completo</label>
             <div className="relative">
               <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
@@ -375,7 +375,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Distanza Sede / Cantiere (km)</label>
             <div className="relative">
               <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
@@ -398,7 +398,7 @@ const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
             <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-800">Note</span>
           </div>
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Interne</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Note Interne</label>
             <div className="relative">
               <MessageSquare className="absolute left-5 top-5 text-slate-400" size={18} />
               <textarea 

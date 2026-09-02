@@ -116,7 +116,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
       <Card className="p-10 bg-white/50 backdrop-blur-md border border-white/50 shadow-xl rounded-[2.5rem] space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Costo Base (€)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Costo Base (€)</label>
             <div className="relative">
               <Euro className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -131,7 +131,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ricarico (%)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Ricarico (%)</label>
             <div className="relative">
               <Percent className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -146,7 +146,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Trasporto (€)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Trasporto (€)</label>
             <div className="relative">
               <Truck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -161,7 +161,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fee Montaggio (%)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fee Montaggio (%)</label>
             <div className="relative">
               <Percent className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -176,7 +176,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fee Montaggio (€)</label>
+            <label className="text-[0.75rem] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">Fee Montaggio (€)</label>
             <div className="relative">
               <Wrench className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -201,7 +201,7 @@ const CcConfigTab = ({ costCenter, onSave }) => {
                 onChange={handleAutoFeeToggle}
                 className="rounded border-slate-300 text-accent focus:ring-accent/20 h-4 w-4 cursor-pointer"
               />
-              <label htmlFor="autoFee" className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer select-none">
+              <label htmlFor="autoFee" className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer select-none">
                 Calcola in automatico (usa % a sinistra)
               </label>
             </div>

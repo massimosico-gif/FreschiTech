@@ -325,6 +325,12 @@ fn crea_indici(conn: &Connection) -> Result<()> {
         ("idx_catalog_supplier", "catalog_materials", "supplier"),
         ("idx_quote_client", "quotes", "client_id"),
         ("idx_quote_item_quote", "quote_items", "quote_id"),
+        // Aggiunti dalla 1.3.0: le schede di commessa filtrano le voci per
+        // centro di costo, e senza questi indici ogni apertura faceva una
+        // scansione completa delle tre tabelle.
+        ("idx_materials_cc", "materials", "cost_center_id"),
+        ("idx_labor_cc", "labor", "cost_center_id"),
+        ("idx_expenses_cc", "expenses", "cost_center_id"),
     ] {
         // Identificatori letterali definiti qui sopra, mai input utente.
         conn.execute(

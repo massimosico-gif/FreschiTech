@@ -93,9 +93,10 @@ pub fn run() {
             tecno_core::backup_database,
             tecno_core::get_backup_info,
             tecno_core::send_logs_to_developer,
+            // L'elenco dei comuni italiani: localizzazione, non dominio.
+            tecno_core::search_municipalities,
             // Di FreschiTech.
             commands::get_stats,
-            commands::search_municipalities,
             commands::get_clients,
             commands::save_client,
             commands::delete_client,

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { invoke } from '@tauri-apps/api/core'
 import { Project, Client, CostCenter, Material, Labor, Expense } from '../types'
+import { computeProjectTotals } from '../utils/costing'
 
 interface ConfirmConfig {
   isOpen: boolean;
@@ -35,8 +36,17 @@ export interface ProjectState {
   // Confirm modal
   confirmConfig: ConfirmConfig;
 
+  /**
+   * Centro di costo da selezionare appena i dati sono arrivati.
+   *
+   * Serve per aprire una commessa gia' dentro un suo centro di costo (dalla
+   * ricerca globale): la selezione non puo' avvenire prima del caricamento,
+   * perche' `initProject` azzera lo stato di navigazione.
+   */
+  pendingCostCenterId: number | null;
+
   // Azioni: Inizializzazione
-  initProject: (projectId: number | string) => void;
+  initProject: (projectId: number | string, costCenterId?: number | string | null) => void;
 
   // Azioni: Fetch Dati
   fetchData: (isSilent?: boolean) => Promise<void>;
@@ -67,13 +77,6 @@ export interface ProjectState {
   deleteExpense: (id: number) => Promise<void>;
 }
 
-// ─── Utility ─────────────────────────────────────────────────────────
-const parseNum = (val: any): number => {
-  if (val === null || val === undefined) return 0;
-  const parsed = parseFloat(String(val));
-  return isNaN(parsed) ? 0 : parsed;
-};
-
 // ─── Store ───────────────────────────────────────────────────────────
 export const useProjectStore = create<ProjectState>((set, get) => ({
   // ═══ State: Dati della Commessa ════════════════════════════════════
@@ -90,6 +93,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   // ═══ State: UI ═════════════════════════════════════════════════════
   activeTab: 'cost_centers',
   selectedCostCenterId: null,
+  pendingCostCenterId: null,
 
   // Drawer states
   isCCDrawerOpen: false,
@@ -102,9 +106,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   // ═══ Azioni: Inizializzazione ══════════════════════════════════════
 
-  /** Inizializza lo store con un nuovo projectId e carica i dati. */
-  initProject: (projectId) => {
-    set({ projectId, selectedCostCenterId: null, activeTab: 'cost_centers' });
+  /**
+   * Inizializza lo store con un nuovo projectId e carica i dati.
+   *
+   * `costCenterId` permette di atterrare direttamente su un centro di costo:
+   * viene messo in attesa e applicato da `fetchData` quando i centri esistono
+   * davvero, cosi' un id non piu' valido non lascia la pagina in uno stato
+   * incoerente.
+   */
+  initProject: (projectId, costCenterId = null) => {
+    set({
+      projectId,
+      selectedCostCenterId: null,
+      activeTab: 'cost_centers',
+      pendingCostCenterId: costCenterId != null ? Number(costCenterId) : null,
+    });
     get().fetchData();
   },
 
@@ -131,6 +147,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const p = projects.find(item => Number(item.id) === Number(projectId));
       if (p) {
         const c = clients.find(item => item.id === p.client_id);
+
+        // Apertura diretta su un centro di costo: si applica solo se il
+        // centro richiesto esiste ancora in questa commessa.
+        const pending = get().pendingCostCenterId;
+        const pendingExists = pending != null
+          && centers.some(cc => Number(cc.id) === Number(pending));
+
         set({
           project: p,
           client: c || null,
@@ -138,7 +161,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           materials: mats,
           labor: hours,
           expenses: others,
-          loading: false
+          loading: false,
+          pendingCostCenterId: null,
+          ...(pendingExists
+            ? { selectedCostCenterId: Number(pending), activeTab: 'dashboard' }
+            : {})
         });
       } else {
         set({ errorInfo: `Progetto ID ${projectId} non trovato`, loading: false });
@@ -177,14 +204,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await invoke('save_cost_center', { cc: ccData });
       set({ isCCDrawerOpen: false });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   deleteCostCenter: async (id) => {
     try {
       await invoke('delete_cost_center', { id });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   saveMaterial: async (matData) => {
@@ -192,14 +219,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await invoke('save_material', { mat: matData });
       set({ isMatDrawerOpen: false });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   deleteMaterial: async (id) => {
     try {
       await invoke('delete_material', { id });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   saveLabor: async (laborData) => {
@@ -210,28 +237,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         await invoke('save_labor', { labor: laborData });
       }
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   deleteLabor: async (id) => {
     try {
       await invoke('delete_labor', { id });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   saveExpense: async (expenseData) => {
     try {
       await invoke('save_expense', { expense: expenseData });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 
   deleteExpense: async (id) => {
     try {
       await invoke('delete_expense', { id });
       get().fetchData(true);
-    } catch (err: any) { alert(err); }
+    } catch (err) { alert(String(err)); }
   },
 }));
 
@@ -244,52 +271,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 export const useProjectStats = () => useProjectStore(useShallow(state => {
   const { costCenters, materials, labor, expenses, selectedCostCenterId } = state;
 
-  const filteredMats = selectedCostCenterId
-    ? materials.filter(m => Number(m.cost_center_id) === Number(selectedCostCenterId))
-    : materials;
-  const filteredLabor = selectedCostCenterId
-    ? labor.filter(l => Number(l.cost_center_id) === Number(selectedCostCenterId))
-    : labor;
-  const filteredExpenses = selectedCostCenterId
-    ? expenses.filter(e => Number(e.cost_center_id) === Number(selectedCostCenterId))
-    : expenses;
+  const belongsToSelection = (ccId: number | null | undefined) =>
+    !selectedCostCenterId || Number(ccId) === Number(selectedCostCenterId);
 
-  const activeCC = selectedCostCenterId
-    ? costCenters.find(cc => cc.id === Number(selectedCostCenterId))
-    : null;
+  // Con un centro di costo selezionato si considerano solo le sue voci e il
+  // centro stesso; altrimenti l'intera commessa.
+  const activeCostCenters = selectedCostCenterId
+    ? costCenters.filter(cc => Number(cc.id) === Number(selectedCostCenterId))
+    : costCenters;
 
-  const matTotalCost = filteredMats.reduce((acc, m) => acc + (parseNum(m.quantity) * parseNum(m.unit_price)), 0);
-  const matTotalSale = filteredMats.reduce((acc, m) => acc + (parseNum(m.quantity) * parseNum(m.unit_price) * (1 + parseNum(m.markup))), 0);
-
-  let ccCost = 0;
-  let ccSale = 0;
-  let ccAccepted = 0;
-
-  if (selectedCostCenterId && activeCC) {
-    ccCost = parseNum(activeCC.base_cost) + parseNum(activeCC.shipping) + parseNum(activeCC.install_fee);
-    ccSale = parseNum(activeCC.base_cost) * (1 + parseNum(activeCC.markup)) + parseNum(activeCC.shipping) + parseNum(activeCC.install_fee);
-    ccAccepted = parseNum(activeCC.accepted_budget);
-  } else {
-    ccCost = costCenters.reduce((acc, cc) => acc + parseNum(cc.base_cost) + parseNum(cc.shipping) + parseNum(cc.install_fee), 0);
-    ccSale = costCenters.reduce((acc, cc) => acc + parseNum(cc.base_cost) * (1 + parseNum(cc.markup)) + parseNum(cc.shipping) + parseNum(cc.install_fee), 0);
-    ccAccepted = costCenters.reduce((acc, cc) => acc + parseNum(cc.accepted_budget), 0);
-  }
-
-  const laborTotalCost = filteredLabor.reduce((acc, l) => acc + (parseNum(l.hours) * parseNum(l.hourly_cost)) + parseNum(l.travel_cost), 0);
-  const laborTotalSale = filteredLabor.reduce((acc, l) => acc + ((parseNum(l.hours) * parseNum(l.hourly_cost)) + parseNum(l.travel_cost)) * (1 + parseNum(l.markup)), 0);
-  const expenseTotalCost = filteredExpenses.reduce((acc, ex) => acc + parseNum(ex.amount), 0);
-  const expenseTotalSale = filteredExpenses.reduce((acc, ex) => acc + (parseNum(ex.amount) * (1 + parseNum(ex.markup))), 0);
-
-  const costoTotale = matTotalCost + ccCost + laborTotalCost + expenseTotalCost;
-  const valoreLavori = matTotalSale + ccSale + laborTotalSale + expenseTotalSale;
-
-  return {
-    costoTotale,
-    valoreLavori,
-    preventivoAccettato: ccAccepted,
-    utile: ccAccepted - costoTotale,
-    utileListino: valoreLavori - costoTotale
-  };
+  return computeProjectTotals({
+    costCenters: activeCostCenters,
+    materials: materials.filter(m => belongsToSelection(m.cost_center_id)),
+    labor: labor.filter(l => belongsToSelection(l.cost_center_id)),
+    expenses: expenses.filter(e => belongsToSelection(e.cost_center_id)),
+  });
 }));
 
 /**

@@ -13,7 +13,7 @@ console.error = (...args) => {
     if (arg instanceof Error) {
       return `${arg.message}\n${arg.stack}`;
     } else if (typeof arg === 'object') {
-      try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+      try { return JSON.stringify(arg); } catch { return String(arg); }
     }
     return String(arg);
   }).join(' ');
@@ -68,7 +68,9 @@ document.addEventListener('focusin', (e) => {
             target.select();
           }
           selectOnMouseUp = false;
-        } catch (err) {}
+        } catch {
+          // select() non è disponibile su alcuni tipi di input: ignoriamo.
+        }
       }
     }, 50);
   }
@@ -82,7 +84,9 @@ document.addEventListener('mouseup', (e) => {
         if (typeof target.select === 'function') {
           target.select();
         }
-      } catch (err) {}
+      } catch {
+        // select() non è disponibile su alcuni tipi di input: ignoriamo.
+      }
     }, 0);
     selectOnMouseUp = false;
   }

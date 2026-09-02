@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component {
             </div>
 
             {/* Dettagli dell'errore */}
-            <div className="w-full bg-slate-950/5 border border-slate-950/5 rounded-2xl p-5 text-left font-mono text-[10px] text-rose-600 max-h-40 overflow-y-auto select-all leading-relaxed">
+            <div className="w-full bg-slate-950/5 border border-slate-950/5 rounded-2xl p-5 text-left font-mono text-[0.72rem] text-rose-600 max-h-40 overflow-y-auto select-all leading-relaxed">
               <p className="font-black text-rose-700">{this.state.error && this.state.error.toString()}</p>
               {this.state.errorInfo && (
                 <pre className="mt-3 text-slate-500 whitespace-pre-wrap">{this.state.errorInfo.componentStack}</pre>

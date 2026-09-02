@@ -164,7 +164,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
 
               {/* Centro della ciambella */}
               <div className="absolute text-center">
-                <p className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 mb-0.5">Margine Utile</p>
+                <p className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 mb-0.5">Margine Utile</p>
                 <p className="text-xl font-black text-emerald-500">
                   {utilePercent}%
                 </p>
@@ -172,7 +172,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
             </div>
 
             {/* Legenda Custom */}
-            <div className="flex justify-center gap-6 mt-4 text-[0.65rem] font-black uppercase tracking-wider">
+            <div className="flex justify-center gap-6 mt-4 text-[0.75rem] font-black uppercase tracking-wider">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f43f5e' }}></div>
                 <span className="text-slate-500">Costo ({costoPercent}%)</span>
@@ -194,7 +194,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
             </div>
             <div className="space-y-6">
               <div>
-                <div className="flex justify-between text-[0.65rem] font-black uppercase tracking-widest mb-2">
+                <div className="flex justify-between text-[0.75rem] font-black uppercase tracking-widest mb-2">
                   <span className="group-hover:text-current transition-colors">Copertura Budget</span>
                   <span>{progressPercent}%</span>
                 </div>
@@ -230,13 +230,13 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
           {phaseData.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1 space-y-4">
-                <h4 className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400 mb-4">Percentuale su Costo Totale</h4>
+                <h4 className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400 mb-4">Percentuale su Costo Totale</h4>
                 {phaseData.map((item, idx) => {
                   const perc = stats.costoTotale > 0 ? (item.totalCost / stats.costoTotale) * 100 : 0
                   return (
                     <div key={idx} className="space-y-1">
                       <div className="flex justify-between text-xs font-bold text-slate-700">
-                        <span className="truncate max-w-[150px] uppercase text-[0.65rem]">{item.name}</span>
+                        <span className="truncate max-w-[150px] uppercase text-[0.75rem]">{item.name}</span>
                         <span>{perc.toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
@@ -276,7 +276,7 @@ const DashboardTab = ({ stats, project, labor = [], materials = [], expenses = [
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-400 text-[0.65rem] font-black uppercase tracking-widest">
+            <div className="py-8 text-center text-slate-400 text-[0.75rem] font-black uppercase tracking-widest">
               Nessuna attività (ore, materiali, spese) registrata per questo centro di costo.
             </div>
           )}

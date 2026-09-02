@@ -4,10 +4,12 @@ import { Check, ChevronDown, Search, Layers } from 'lucide-react'
 const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Seleziona fase...", compact = false }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [highlighted, setHighlighted] = useState(0)
   const containerRef = useRef(null)
+  const triggerRef = useRef(null)
 
   const selectedPhase = phases.find(p => p.id === value)
-  const filteredPhases = phases.filter(p => 
+  const filteredPhases = phases.filter(p =>
     p.label.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -21,12 +23,68 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Ogni ricerca riparte dalla prima voce: altrimenti l'evidenziazione
+  // resterebbe su un indice che non esiste piu' nell'elenco filtrato.
+  useEffect(() => { setHighlighted(0) }, [search])
+
+  const pick = (phaseId) => {
+    onChange(phaseId)
+    setIsOpen(false)
+    setSearch('')
+    triggerRef.current?.focus()
+  }
+
+  /**
+   * Tastiera della tendina.
+   *
+   * Ferma la risalita degli eventi: il box di inserimento che contiene questo
+   * selettore usa Invio per salvare la riga, e qui Invio significa invece
+   * "scegli la fase evidenziata".
+   */
+  const handleSearchKeyDown = (e) => {
+    e.stopPropagation()
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlighted(prev => (prev + 1) % Math.max(filteredPhases.length, 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlighted(prev => (prev - 1 + filteredPhases.length) % Math.max(filteredPhases.length, 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const phase = filteredPhases[highlighted]
+      if (phase) {
+        pick(phase.id)
+      } else if (onAddNew && search.trim()) {
+        // Nessuna corrispondenza ma qualcosa di scritto: Invio crea la fase.
+        onAddNew(search.trim())
+        setIsOpen(false)
+        setSearch('')
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setIsOpen(false)
+      setSearch('')
+      triggerRef.current?.focus()
+    }
+  }
+
+  /** Freccia giu' sul pulsante chiuso apre la tendina, come in una select. */
+  const handleTriggerKeyDown = (e) => {
+    if (!isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setIsOpen(true)
+    }
+  }
+
   return (
     <div className="relative" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={compact 
+        onKeyDown={handleTriggerKeyDown}
+        className={compact
           ? `w-full bg-white border border-slate-200 rounded-xl py-2 pl-8 pr-4 text-xs font-bold text-slate-700 flex items-center justify-between transition-all relative hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] ${
               isOpen ? 'ring-4 ring-accent/10 border-accent/50 bg-white' : ''
             }`
@@ -54,8 +112,9 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
               placeholder="Cerca o crea fase..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className={`w-full bg-slate-50 border-none text-slate-700 font-bold focus:ring-0 ${
-                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.65rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
+                compact ? 'rounded-xl py-1.5 pl-8 pr-3 text-[0.72rem]' : 'rounded-2xl py-3 pl-10 pr-4 text-xs'
               }`}
               onClick={(e) => e.stopPropagation()}
             />
@@ -63,19 +122,18 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
           
           <div className="max-h-60 overflow-y-auto no-scrollbar py-1">
             {filteredPhases.length > 0 ? (
-              filteredPhases.map(phase => (
+              filteredPhases.map((phase, idx) => (
                 <button
                   key={phase.id}
                   type="button"
-                  onClick={() => {
-                    onChange(phase.id)
-                    setIsOpen(false)
-                    setSearch('')
-                  }}
+                  onClick={() => pick(phase.id)}
+                  onMouseEnter={() => setHighlighted(idx)}
                   className={`w-full flex items-center justify-between transition-all group ${
                     compact ? 'p-2 px-3 rounded-xl' : 'p-4 rounded-2xl'
                   } ${
-                    value === phase.id ? 'bg-accent/5 text-accent' : 'hover:bg-slate-50 text-slate-600'
+                    value === phase.id
+                      ? 'bg-accent/5 text-accent'
+                      : idx === highlighted ? 'bg-slate-100 text-slate-700' : 'text-slate-600'
                   }`}
                 >
                   <span className="text-xs font-black uppercase tracking-widest">{phase.label}</span>
@@ -84,7 +142,7 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
               ))
             ) : (
               <div className="p-4 text-center text-slate-400 flex flex-col items-center gap-2">
-                <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">Nessuna fase trovata</p>
+                <p className="text-[0.75rem] font-black uppercase tracking-widest text-slate-400">Nessuna fase trovata</p>
                 {onAddNew && (
                   <button
                     type="button"
@@ -92,7 +150,7 @@ const PhaseSelector = ({ phases, value, onChange, onAddNew, placeholder = "Selez
                       onAddNew(search)
                       setIsOpen(false)
                     }}
-                    className="px-3 py-1.5 bg-accent text-white rounded-xl text-[0.55rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
+                    className="px-3 py-1.5 bg-accent text-white rounded-xl text-[0.7rem] font-black uppercase tracking-widest hover:bg-accent/90 transition-all shadow-md shadow-accent/20 cursor-pointer"
                   >
                     {search ? `+ "${search}"` : '+ Aggiungi Nuova Fase'}
                   </button>

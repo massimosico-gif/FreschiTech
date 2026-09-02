@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as saveFileDialog } from '@tauri-apps/plugin-dialog'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { 
   AlertCircle,
   BarChart3,
@@ -18,6 +18,7 @@ import { ConfirmModal } from '@tecno/ui/feedback'
 
 // Project Sub-components
 import ProjectHeader from './project/ProjectHeader'
+import TotalsBar from './project/TotalsBar'
 import DashboardTab from './project/DashboardTab'
 import CostCentersTab from './project/CostCentersTab'
 import MaterialsTab from './project/MaterialsTab'
@@ -30,22 +31,21 @@ import CcConfigTab from './project/CcConfigTab'
 import EditCostCenterDrawer from './EditCostCenterDrawer'
 import EditMaterialDrawer from './EditMaterialDrawer'
 
-// PDF Generator Utilities
-import { generateClientPdf, generateInternalPdf } from '../utils/pdfGenerator'
+// I generatori PDF trascinano jsPDF, html2canvas e purify (oltre 400 kB):
+// vengono caricati su richiesta, solo quando si esporta davvero un PDF.
 
 // Zustand Store
-import useProjectStore, { 
-  useProjectStats, 
-  useFilteredMaterials, 
-  useFilteredLabor, 
-  useFilteredExpenses, 
-  useActiveCC 
+import useProjectStore, {
+  useProjectStats,
+  useFilteredMaterials,
+  useFilteredLabor,
+  useFilteredExpenses,
+  useActiveCC
 } from '../hooks/useProjectStore'
-import { useToast } from '@tecno/ui/feedback'
+import useHotkeys from '../hooks/useHotkeys'
 
 
-const ProjectDetails = ({ projectId, onBack }) => {
-  const toast = useToast()
+const ProjectDetails = ({ projectId, initialCostCenterId = null, onBack }) => {
   // ─── Store: stato e azioni ────────────────────────────────────────
   const project = useProjectStore(s => s.project)
   const client = useProjectStore(s => s.client)
@@ -95,8 +95,67 @@ const ProjectDetails = ({ projectId, onBack }) => {
 
   // ─── Effetti ──────────────────────────────────────────────────────
   useEffect(() => {
-    initProject(projectId)
-  }, [projectId])
+    initProject(projectId, initialCostCenterId)
+  }, [projectId, initialCostCenterId])
+
+  // ─── Schede ───────────────────────────────────────────────────────
+  // Definite prima delle guardie di rendering perche' le scorciatoie da
+  // tastiera devono essere registrate a ogni render, anche mentre si carica.
+
+  const ccTabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'config', label: 'Configurazione Costi', icon: Settings },
+    { id: 'materials', label: 'Materiali', icon: Package },
+    { id: 'labor', label: 'Manodopera', icon: HardHat },
+    { id: 'expenses', label: 'Spese', icon: Receipt }
+  ]
+
+  const projectTabs = [
+    { id: 'cost_centers', label: 'Centri di Costo', icon: Target },
+    { id: 'analytics', label: 'Analisi Fasi & Categorie', icon: BarChart3 }
+  ]
+
+  const tabs = selectedCostCenterId ? ccTabs : projectTabs
+
+  // ─── Scorciatoie ──────────────────────────────────────────────────
+  // Alt + numero salta alla scheda corrispondente; Esc risale di un livello,
+  // dal centro di costo alla commessa e dalla commessa all'elenco.
+  const hotkeys = useMemo(() => {
+    const tabKeys = tabs.slice(0, 9).map((tab, index) => ({
+      combo: `alt+${index + 1}`,
+      handler: () => setActiveTab(tab.id),
+      description: `Scheda ${tab.label}`,
+    }))
+
+    return [
+      ...tabKeys,
+      {
+        combo: 'escape',
+        description: 'Torna indietro di un livello',
+        // Con un pannello aperto Esc deve chiudere quello, non navigare:
+        // se ne occupa il pannello stesso.
+        enabled: !isCCDrawerOpen && !isMatDrawerOpen && !confirmConfig.isOpen,
+        handler: () => {
+          if (selectedCostCenterId) {
+            deselectCostCenter()
+          } else {
+            onBack()
+          }
+        },
+      },
+    ]
+  }, [
+    tabs,
+    selectedCostCenterId,
+    setActiveTab,
+    deselectCostCenter,
+    onBack,
+    isCCDrawerOpen,
+    isMatDrawerOpen,
+    confirmConfig.isOpen,
+  ])
+
+  useHotkeys(hotkeys)
 
   // ─── Render Guards ────────────────────────────────────────────────
   if (loading) return <div className="p-20 text-center font-black uppercase tracking-widest text-slate-400">Caricamento...</div>
@@ -117,21 +176,6 @@ const ProjectDetails = ({ projectId, onBack }) => {
         description: `Centro di Costo: ${activeCC.brand ? activeCC.brand + ' ' : ''}${activeCC.model} (${activeCC.category})`
       }
     : project
-
-  const ccTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'config', label: 'Configurazione Costi', icon: Settings },
-    { id: 'materials', label: 'Materiali', icon: Package },
-    { id: 'labor', label: 'Manodopera', icon: HardHat },
-    { id: 'expenses', label: 'Spese', icon: Receipt }
-  ]
-
-  const projectTabs = [
-    { id: 'cost_centers', label: 'Centri di Costo', icon: Target },
-    { id: 'analytics', label: 'Analisi Fasi & Categorie', icon: BarChart3 }
-  ]
-
-  const tabs = selectedCostCenterId ? ccTabs : projectTabs
 
   const headerProject = selectedCostCenterId && activeCC
     ? {
@@ -154,49 +198,37 @@ const ProjectDetails = ({ projectId, onBack }) => {
 
   // ─── PDF Export Handlers ──────────────────────────────────────────
 
-  const handleExportClientPdf = async () => {
+  /**
+   * Genera un PDF e lo salva dove indica l'utente.
+   *
+   * @param generatorName  Esportazione da usare in `utils/pdfGenerator`.
+   * @param suffix         Suffisso del nome file proposto.
+   */
+  const exportPdf = async (generatorName, suffix) => {
     if (!project) return
     try {
-      const doc = generateClientPdf(project, client, costCenters, materials, labor, expenses)
+      const generators = await import('../utils/pdfGenerator')
+      const doc = generators[generatorName](project, client, costCenters, materials, labor, expenses)
+
       const filePath = await saveFileDialog({
         filters: [{
           name: 'Documento PDF',
           extensions: ['pdf']
         }],
-        defaultPath: `Commessa_${project.name.replace(/\s+/g, '_')}_Cliente.pdf`
+        defaultPath: `Commessa_${project.name.replace(/\s+/g, '_')}_${suffix}.pdf`
       })
-      if (filePath) {
-        const pdfArrayBuffer = doc.output('arraybuffer')
-        const pdfBytes = new Uint8Array(pdfArrayBuffer)
-        await invoke('save_pdf_file', { destPath: filePath, content: Array.from(pdfBytes) })
-      }
+      if (!filePath) return
+
+      const pdfBytes = new Uint8Array(doc.output('arraybuffer'))
+      await invoke('save_pdf_file', { destPath: filePath, content: Array.from(pdfBytes) })
     } catch (err) {
       console.error(err)
-      toast.error(`Errore durante il salvataggio del PDF: ${err}`)
+      alert(`Errore durante il salvataggio del PDF: ${err}`)
     }
   }
 
-  const handleExportInternalPdf = async () => {
-    if (!project) return
-    try {
-      const doc = generateInternalPdf(project, client, costCenters, materials, labor, expenses)
-      const filePath = await saveFileDialog({
-        filters: [{
-          name: 'Documento PDF',
-          extensions: ['pdf']
-        }],
-        defaultPath: `Commessa_${project.name.replace(/\s+/g, '_')}_ReportInterno.pdf`
-      })
-      if (filePath) {
-        const pdfArrayBuffer = doc.output('arraybuffer')
-        const pdfBytes = new Uint8Array(pdfArrayBuffer)
-        await invoke('save_pdf_file', { destPath: filePath, content: Array.from(pdfBytes) })
-      }
-    } catch (err) {
-      console.error(err)
-      toast.error(`Errore durante il salvataggio del PDF: ${err}`)
-    }
-  }
+  const handleExportClientPdf = () => exportPdf('generateClientPdf', 'Cliente')
+  const handleExportInternalPdf = () => exportPdf('generateInternalPdf', 'ReportInterno')
 
   // ─── Render ───────────────────────────────────────────────────────
   return (
@@ -214,14 +246,21 @@ const ProjectDetails = ({ projectId, onBack }) => {
         parentProjectName={project?.name}
       />
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.4 }}
-        >
+      {/*
+        Solo l'entrata, e breve.
+
+        `AnimatePresence mode="wait"` metteva in fila 0,4 s di uscita e 0,4 s
+        di entrata: con cinquanta cambi scheda al giorno erano quaranta
+        secondi di attesa pura. Togliendo l'uscita la scheda nuova compare
+        subito, la dissolvenza da 0,15 s le toglie lo scatto, e non resta
+        nessun tempo morto fra le due.
+      */}
+      <motion.div
+        key={activeTab}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
+      >
           {activeTab === 'dashboard' && <DashboardTab stats={stats} project={activeProjectForDashboard} labor={filteredLabor} materials={filteredMaterials} expenses={filteredExpenses} isCostCenter={!!selectedCostCenterId} />}
            {activeTab === 'cost_centers' && <CostCentersTab costCenters={costCenters} onAdd={() => openCCDrawer(null)} onEdit={(cc) => openCCDrawer(cc)} onDelete={deleteCostCenter} onClickCard={(ccId) => selectCostCenter(ccId)} />}
           {activeTab === 'analytics' && <AnalyticsTab labor={labor} materials={materials} expenses={expenses} costCenters={costCenters} project={project} />}
@@ -229,8 +268,10 @@ const ProjectDetails = ({ projectId, onBack }) => {
           {activeTab === 'labor' && <LaborTab labor={filteredLabor} costCenters={costCenters} onDelete={deleteLabor} defaultCostCenterId={selectedCostCenterId} projectId={projectId} project={project} onSave={saveLabor} onRefresh={() => fetchData(true)} />}
           {activeTab === 'expenses' && <ExpensesTab expenses={filteredExpenses} costCenters={costCenters} onDelete={deleteExpense} defaultCostCenterId={selectedCostCenterId} projectId={projectId} onSave={saveExpense} />}
           {activeTab === 'config' && <CcConfigTab costCenter={activeCC} onSave={saveCostCenter} />}
-        </motion.div>
-      </AnimatePresence>
+      </motion.div>
+
+      {/* I totali restano sotto gli occhi mentre si inseriscono le voci. */}
+      <TotalsBar stats={stats} isCostCenter={!!selectedCostCenterId} />
 
       <EditCostCenterDrawer isOpen={isCCDrawerOpen} onClose={closeCCDrawer} cc={selectedCC} projectId={projectId} onSave={saveCostCenter} />
       <EditMaterialDrawer isOpen={isMatDrawerOpen} onClose={closeMatDrawer} material={selectedMat} projectId={projectId} costCenters={costCenters} onSave={saveMaterial} defaultCostCenterId={selectedCostCenterId} />

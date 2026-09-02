@@ -28,10 +28,11 @@ import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
 import VehicleSelector from '../ui/VehicleSelector'
 import { ConfirmModal } from '@tecno/ui/feedback'
-import { useToast } from '@tecno/ui/feedback'
+import Kbd from '../ui/Kbd'
+import usePendingBulkAction from '../../hooks/usePendingBulkAction'
+import usePhaseOptions from '../../hooks/usePhaseOptions'
 
 const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, projectId = null, project = null, onSave = null, onRefresh = null }) => {
-  const toast = useToast()
   // Sorting
   const [sort, setSort] = useState({ field: 'date', direction: 'desc' })
 
@@ -115,137 +116,63 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
     }
   }
 
-  const [pendingMove, setPendingMove] = useState(null)
-  const [countdown, setCountdown] = useState(5)
-  const timerRef = useRef(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+  // ── Azioni massive differite ────────────────────────────────────────
+  // Countdown annullabile: timer, cleanup ed esecuzione vivono nell'hook,
+  // condiviso con MaterialsTab.
+  const runBulkAction = async ({ type, ids, payload }) => {
+    setSelectedIds([])
+    try {
+      if (type === 'move') {
+        await invoke('move_labor_cost_center', {
+          laborIds: ids,
+          costCenterId: payload.costCenterId,
+        })
+      } else {
+        await invoke('update_labor_phase', {
+          laborIds: ids,
+          phase: payload.phase,
+        })
+      }
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      const azione = type === 'move' ? 'nello spostamento' : "nell'aggiornamento dell'ambito"
+      alert(`Errore ${azione} della manodopera: ` + err)
     }
-  }, [])
+  }
+
+  const {
+    pending: pendingMove,
+    countdown,
+    schedule: schedulePendingAction,
+    cancel: cancelPendingMove,
+    runNow: runPendingNow,
+  } = usePendingBulkAction(runBulkAction)
 
   const startPendingMove = (targetCCId) => {
     if (!targetCCId) return
-    
-    let targetCCName = 'Generale'
-    if (targetCCId !== 'general') {
-      const cc = costCenters.find(c => c.id.toString() === targetCCId)
-      targetCCName = cc ? `${cc.brand ? cc.brand + ' ' : ''}${cc.model}` : 'Generale'
-    }
-    
-    const idsToMove = [...selectedIds]
-    
-    setPendingMove({
-      type: 'move',
-      laborIds: idsToMove,
-      targetCCId,
-      targetCCName
+    const cc = costCenters.find(c => c.id.toString() === targetCCId)
+    const targetCCName = cc ? `${cc.brand ? cc.brand + ' ' : ''}${cc.model}` : 'Generale'
+
+    schedulePendingAction('move', selectedIds, {
+      costCenterId: targetCCId === 'general' ? null : Number(targetCCId),
+      targetCCName,
     })
-    setCountdown(5)
-    
-    if (timerRef.current) clearInterval(timerRef.current)
-    
-    let counter = 5
-    timerRef.current = setInterval(() => {
-      counter -= 1
-      if (counter <= 0) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-        executePendingMove(targetCCId, idsToMove)
-      } else {
-        setCountdown(counter)
-      }
-    }, 1000)
   }
 
   const startPendingPhaseUpdate = (targetPhase) => {
     if (!targetPhase) return
-    const idsToUpdate = [...selectedIds]
-    
-    setPendingMove({
-      type: 'phase',
-      laborIds: idsToUpdate,
-      targetPhase
+    schedulePendingAction('phase', selectedIds, {
+      // "Generale" non e' una fase reale: a database corrisponde a NULL.
+      phase: targetPhase === 'Generale' ? null : targetPhase,
+      targetPhase,
     })
-    setCountdown(5)
-    
-    if (timerRef.current) clearInterval(timerRef.current)
-    
-    let counter = 5
-    timerRef.current = setInterval(() => {
-      counter -= 1
-      if (counter <= 0) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-        executePendingPhaseUpdate(targetPhase, idsToUpdate)
-      } else {
-        setCountdown(counter)
-      }
-    }, 1000)
   }
 
-  const cancelPendingMove = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    setPendingMove(null)
-  }
-
-  const executePendingMove = async (targetCCId, idsToMove) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    
-    const costCenterId = targetCCId === 'general' ? null : Number(targetCCId)
-    const laborToMove = idsToMove || (pendingMove ? pendingMove.laborIds : [])
-    
-    setSelectedIds([])
-    setPendingMove(null)
-    
-    try {
-      await invoke('move_labor_cost_center', { 
-        laborIds: laborToMove, 
-        costCenterId 
-      })
-      if (onRefresh) {
-        onRefresh()
-      }
-    } catch (err) {
-      toast.error("Errore nello spostamento della manodopera: " + err)
-    }
-  }
-
-  const executePendingPhaseUpdate = async (targetPhase, idsToUpdate) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    
-    const laborToUpdate = idsToUpdate || (pendingMove ? pendingMove.laborIds : [])
-    
-    setSelectedIds([])
-    setPendingMove(null)
-    
-    try {
-      await invoke('update_labor_phase', { 
-        laborIds: laborToUpdate, 
-        phase: targetPhase === 'Generale' ? null : targetPhase
-      })
-      if (onRefresh) {
-        onRefresh()
-      }
-    } catch (err) {
-      toast.error("Errore nell'aggiornamento dell'ambito della manodopera: " + err)
-    }
-  }
-
-  const [phaseOptions, setPhaseOptions] = useState([
-    { id: 'all', label: 'Tutte le Fasi' }
-  ])
-  const [inlinePhaseOptions, setInlinePhaseOptions] = useState([{ id: 'Generale', label: 'Generale' }])
+  const {
+    filterOptions: phaseOptions,
+    inputOptions: inlinePhaseOptions,
+    addPhase,
+  } = usePhaseOptions('phases_labor')
   const [employees, setEmployees] = useState([])
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
 
@@ -263,6 +190,9 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
     markup: 0.50,
     vehicle: 'Nessuno'
   })
+  // Primo campo del box: il fuoco ci torna dopo ogni salvataggio.
+  const boxFirstFieldRef = useRef(null)
+
   const [vehicleOptions, setVehicleOptions] = useState([
     { id: 'Nessuno', label: 'Nessun Mezzo' }
   ])
@@ -296,14 +226,8 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       }
 
       try {
+        // Le fasi sono gestite da usePhaseOptions: qui servono solo i mezzi.
         const res = await invoke('get_global_settings')
-        if (res.phases_labor && res.phases_labor.length > 0) {
-          setPhaseOptions([
-            { id: 'all', label: 'Tutte le Fasi' },
-            ...res.phases_labor.map(p => ({ id: p, label: p }))
-          ])
-          setInlinePhaseOptions(res.phases_labor.map(p => ({ id: p, label: p })))
-        }
         if (res.vehicles && res.vehicles.length > 0) {
           setRawVehicles(res.vehicles)
           const mappedVehicles = res.vehicles.map(v => {
@@ -347,7 +271,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       }
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo operatore:", err)
-      toast.error("Impossibile salvare il nuovo operatore: " + err)
+      alert("Impossibile salvare il nuovo operatore: " + err)
     }
   }
 
@@ -392,38 +316,13 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       }))
     } catch (err) {
       console.error("Errore nel salvataggio del nuovo mezzo:", err)
-      toast.error("Impossibile salvare il nuovo mezzo: " + err)
+      alert("Impossibile salvare il nuovo mezzo: " + err)
     }
   }
 
   const handleAddNewPhase = async (newPhaseName) => {
-    const trimmed = newPhaseName.trim()
-    if (!trimmed) return
-
-    try {
-      const currentSettings = await invoke('get_global_settings')
-      const phases = currentSettings.phases_labor || []
-
-      if (!phases.includes(trimmed)) {
-        const updatedPhases = [...phases, trimmed]
-        const newSettings = {
-          ...currentSettings,
-          phases_labor: updatedPhases
-        }
-
-        await invoke('save_global_settings', { settings: newSettings })
-        setPhaseOptions([
-          { id: 'all', label: 'Tutte le Fasi' },
-          ...updatedPhases.map(p => ({ id: p, label: p }))
-        ])
-        setInlinePhaseOptions(updatedPhases.map(p => ({ id: p, label: p })))
-      }
-
-      setNewLaborData(prev => ({ ...prev, phase: trimmed }))
-    } catch (err) {
-      console.error("Errore nel salvataggio della nuova fase:", err)
-      toast.error("Impossibile salvare la nuova fase: " + err)
-    }
+    const created = await addPhase(newPhaseName)
+    if (created) setNewLaborData(prev => ({ ...prev, phase: created }))
   }
 
   const handleAddNewLaborFromBox = async () => {
@@ -439,21 +338,37 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       isTravel = true;
     }
 
-    const entries = selectedEmployeeIds.map((id, index) => {
-      const emp = employees.find(e => e.id === id)
-      return {
-        ...newLaborData,
-        project_id: Number(projectId),
-        cost_center_id: newLaborData.cost_center_id ? parseInt(newLaborData.cost_center_id) : null,
-        operator: emp.name,
-        hourly_cost: emp.default_hourly_cost,
-        hours: parseFloat(newLaborData.hours) || 0,
-        markup: parseFloat(newLaborData.markup) || 0,
-        is_travel: isTravel,
-        vehicle: newLaborData.vehicle || "Nessuno",
-        travel_cost: index === 0 ? travelCost : 0.0
-      }
-    })
+    // Un dipendente selezionato puo' essere stato eliminato dalle Impostazioni
+    // mentre il box di inserimento era aperto: senza questo filtro `emp` sarebbe
+    // undefined e l'accesso a `emp.name` farebbe crollare l'intera interfaccia.
+    const selectedEmployees = selectedEmployeeIds
+      .map(id => employees.find(e => e.id === id))
+      .filter(Boolean)
+
+    if (selectedEmployees.length === 0) {
+      alert("Nessuno dei dipendenti selezionati è più disponibile. Aggiorna la pagina e riprova.")
+      setSelectedEmployeeIds([])
+      return
+    }
+
+    if (selectedEmployees.length < selectedEmployeeIds.length) {
+      alert("Alcuni dipendenti selezionati non sono più disponibili e verranno ignorati.")
+    }
+
+    const entries = selectedEmployees.map((emp, index) => ({
+      ...newLaborData,
+      project_id: Number(projectId),
+      cost_center_id: newLaborData.cost_center_id ? parseInt(newLaborData.cost_center_id) : null,
+      operator: emp.name,
+      hourly_cost: emp.default_hourly_cost,
+      hours: parseFloat(newLaborData.hours) || 0,
+      markup: parseFloat(newLaborData.markup) || 0,
+      is_travel: isTravel,
+      vehicle: newLaborData.vehicle || "Nessuno",
+      // Il costo di trasferta e' del viaggio, non della persona: va addebitato
+      // una sola volta anche se l'inserimento riguarda piu' operatori.
+      travel_cost: index === 0 ? travelCost : 0.0
+    }))
 
     try {
       if (onSave) {
@@ -466,8 +381,32 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         km: 0,
         description: ''
       }))
+      // Il box conserva centro di costo, fase, data e mezzo: riportare il
+      // fuoco sulla descrizione consente di registrare subito la voce dopo.
+      boxFirstFieldRef.current?.focus()
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  /**
+   * Tastiera del box di inserimento: Invio salva, Esc svuota i campi che
+   * cambiano da una registrazione all'altra. Gli eventi gia' consumati da un
+   * menu a tendina arrivano con `defaultPrevented` e vengono lasciati stare.
+   */
+  const handleBoxKeyDown = (e) => {
+    if (e.defaultPrevented) return
+
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+      e.preventDefault()
+      if (!isAddDisabled) handleAddNewLaborFromBox()
+      return
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setNewLaborData(prev => ({ ...prev, hours: 0, km: 0, description: '' }))
+      boxFirstFieldRef.current?.focus()
     }
   }
 
@@ -643,7 +582,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         <td className="px-8 py-4">
           <div className="flex flex-col gap-2 items-end">
             <div className="flex gap-1 items-center justify-end">
-              <span className="text-[0.65rem] font-black text-slate-400">Ore</span>
+              <span className="text-[0.75rem] font-black text-slate-400">Ore</span>
               <input 
                 type="number" 
                 step="any"
@@ -656,7 +595,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
             </div>
             {isVehicleSelected && (
               <div className="flex gap-1 items-center justify-end">
-                <span className="text-[0.65rem] font-black text-slate-400">Km</span>
+                <span className="text-[0.75rem] font-black text-slate-400">Km</span>
                 <input 
                   type="number" 
                   step="any"
@@ -678,7 +617,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
               € {(((inlineFormData.hours * inlineFormData.hourly_cost) + (inlineFormData.travel_cost || 0.0)) * (1 + (inlineFormData.markup || 0.0))).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
             </p>
             <div className="flex items-center gap-1 justify-end">
-              <span className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">Ric.%</span>
+              <span className="text-[0.7rem] font-black text-emerald-500 uppercase tracking-widest">Ric.%</span>
               <input 
                 type="number"
                 placeholder="Ricarico"
@@ -686,7 +625,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                 onChange={(e) => setInlineFormData(p => ({ ...p, markup: (parseFloat(e.target.value) || 0) / 100 }))}
                 onFocus={handleInputSelect}
                 onClick={handleInputSelect}
-                className="w-12 bg-white border border-slate-200 rounded-xl px-1.5 py-1 text-[0.65rem] font-bold text-right text-emerald-600 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
+                className="w-12 bg-white border border-slate-200 rounded-xl px-1.5 py-1 text-[0.75rem] font-bold text-right text-emerald-600 focus:outline-none focus:ring-4 focus:border-accent/50 focus:ring-accent/10 hover:border-accent/40 hover:shadow-[0_12px_24px_rgba(227,6,19,0.15)] transition-all"
               />
             </div>
           </div>
@@ -800,13 +739,19 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
       {/* Box Aggiunta Manodopera Persistente */}
       {onSave && isBoxOpen && (
-        <div className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
+        <div onKeyDown={handleBoxKeyDown} className="relative z-30 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/40 shadow-lg space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-accent/10 rounded-lg text-accent">
                 <Plus size={14} className="stroke-[3]" />
               </div>
-              <span className="text-[0.65rem] font-black uppercase tracking-widest text-slate-500">Nuova Registrazione Ore</span>
+              <span className="text-[0.75rem] font-black uppercase tracking-widest text-slate-500">Nuova Registrazione Ore</span>
+              <span className="hidden lg:flex items-center gap-1.5 ml-3 text-slate-400">
+                <Kbd>Invio</Kbd>
+                <span className="text-[0.7rem] font-semibold">salva</span>
+                <Kbd>Esc</Kbd>
+                <span className="text-[0.7rem] font-semibold">svuota</span>
+              </span>
             </div>
             <div className="flex items-center gap-4">
               {/* Riepilogo economico dell'aggiunta */}
@@ -834,7 +779,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                 const totalSale = totalCost * (1 + newLaborData.markup);
                 return (
                   <div className="text-right">
-                    <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
+                    <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-wider mr-2">Tot. Vendita:</span>
                     <span className="text-sm font-black text-slate-800">
                       € {totalSale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                     </span>
@@ -854,7 +799,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
           <div className="relative z-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
             {/* Operatori */}
             <div className="lg:col-span-4 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Operatori *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Operatori *</label>
               <MultiSelect 
                 options={employeeOptions}
                 selectedValues={selectedEmployeeIds}
@@ -868,9 +813,10 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
             {/* Note Attività */}
             <div className="lg:col-span-4 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Note Attività / Descrizione</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Note Attività / Descrizione</label>
               <input 
                 type="text" 
+                ref={boxFirstFieldRef}
                 placeholder="Descrizione dell'attività..."
                 value={newLaborData.description}
                 onChange={(e) => setNewLaborData(p => ({ ...p, description: e.target.value }))}
@@ -880,7 +826,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
             {/* Mezzo Utilizzato */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Mezzo Utilizzato</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Mezzo Utilizzato</label>
               <VehicleSelector 
                 vehicles={vehicleOptions}
                 value={newLaborData.vehicle}
@@ -902,7 +848,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
             {/* Data */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
               <DatePicker 
                 compact={true}
                 value={newLaborData.date}
@@ -915,7 +861,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
             {/* Centro di Costo (se non è predefinito) */}
             {!defaultCostCenterId ? (
               <div className={`${vehicleSelected ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-1.5`}>
-                <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
+                <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Centro di Costo</label>
                 <select
                   value={newLaborData.cost_center_id || ''}
                   onChange={(e) => setNewLaborData(p => ({ ...p, cost_center_id: e.target.value ? parseInt(e.target.value) : null }))}
@@ -935,7 +881,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                 ? (vehicleSelected ? 'lg:col-span-4' : 'lg:col-span-6') 
                 : (vehicleSelected ? 'lg:col-span-2' : 'lg:col-span-3')
             } space-y-1.5`}>
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ambito / Fase</label>
               <PhaseSelector
                 phases={inlinePhaseOptions}
                 value={newLaborData.phase}
@@ -948,7 +894,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
             {/* Ore */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ore *</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ore *</label>
               <input 
                 type="number" 
                 step="0.25"
@@ -965,7 +911,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
             {/* Km (mostrato solo se selezionato un mezzo) */}
             {vehicleSelected && (
               <div className="lg:col-span-2 space-y-1.5">
-                <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Km *</label>
+                <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Km *</label>
                 <input 
                   type="number" 
                   step="1"
@@ -982,7 +928,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
             {/* Ricarico (%) */}
             <div className="lg:col-span-2 space-y-1.5">
-              <label className="text-[0.55rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric. %</label>
+              <label className="text-[0.7rem] font-black uppercase tracking-widest text-slate-400 ml-1">Ric. %</label>
               <input 
                 type="number"
                 step="1"
@@ -1000,7 +946,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
               <button 
                 onClick={handleAddNewLaborFromBox}
                 disabled={isAddDisabled}
-                className={`w-full py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
+                className={`w-full py-2 rounded-xl text-[0.75rem] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 h-[36px] ${
                   isAddDisabled 
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
                     : 'bg-accent text-white hover:bg-accent/90 shadow-md shadow-accent/15'
@@ -1016,7 +962,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
       {/* Toolbar Filtri Manodopera */}
       <div className="relative z-20 flex flex-col lg:flex-row gap-6 items-end bg-white/50 backdrop-blur-md p-6 rounded-[2rem] border border-white/50 shadow-sm">
         <div className="flex-1 w-full space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Operatore / Attività</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Cerca Operatore / Attività</label>
           <div className="relative group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent transition-colors" size={18} />
             <input 
@@ -1030,7 +976,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         </div>
         
         <div className="w-full lg:w-64 space-y-2">
-          <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
+          <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Fase</label>
           <Select 
             options={phaseOptions}
             value={filters.phase}
@@ -1042,7 +988,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
 
         {!defaultCostCenterId && (
           <div className="w-full lg:w-64 space-y-2">
-            <label className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
+            <label className="text-[0.72rem] font-black uppercase tracking-widest text-slate-400 ml-1">Filtra Centro</label>
             <Select 
               options={ccOptions}
               value={filters.cc}
@@ -1080,30 +1026,30 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                     className="rounded border-slate-300 text-accent focus:ring-accent" 
                   />
                 </th>
-                <th onClick={() => handleSort('operator')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('operator')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Operatore <SortIcon field="operator" /></div>
                 </th>
-                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('description')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Descrizione <SortIcon field="description" /></div>
                 </th>
                 {!defaultCostCenterId && (
-                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                  <th onClick={() => handleSort('cost_center')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                     <div className="flex items-center gap-2">Centro <SortIcon field="cost_center" /></div>
                   </th>
                 )}
-                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('phase')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Ambito <SortIcon field="phase" /></div>
                 </th>
-                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
+                <th onClick={() => handleSort('date')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 cursor-pointer group select-none">
                   <div className="flex items-center gap-2">Data <SortIcon field="date" /></div>
                 </th>
-                <th onClick={() => handleSort('hours')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('hours')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Ore <SortIcon field="hours" /></div>
                 </th>
-                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
+                <th onClick={() => handleSort('total')} className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer group select-none">
                   <div className="flex items-center justify-end gap-2">Tot. Vendita <SortIcon field="total" /></div>
                 </th>
-                <th className="px-8 py-6 text-[0.6rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
+                <th className="px-8 py-6 text-[0.72rem] font-black uppercase tracking-widest text-slate-400 text-center">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1129,7 +1075,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                           {l.vehicle && l.vehicle !== 'Nessuno' && (
                             <div className="flex items-center gap-1 mt-0.5 opacity-80">
                               <Truck size={10} className="text-slate-400" />
-                              <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wider">{l.vehicle}</span>
+                              <span className="text-[0.72rem] font-bold text-slate-400 uppercase tracking-wider">{l.vehicle}</span>
                             </div>
                           )}
                         </div>
@@ -1146,7 +1092,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                           <div className={`p-2 rounded-lg ${l.cost_center_id ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-300'}`}>
                             <Target size={14} />
                           </div>
-                          <span className={`text-[0.65rem] font-black uppercase tracking-tight ${l.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
+                          <span className={`text-[0.75rem] font-black uppercase tracking-tight ${l.cost_center_name ? 'text-slate-800' : 'text-slate-400'}`}>
                             {l.cost_center_name || 'Generale'}
                           </span>
                         </div>
@@ -1157,7 +1103,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                         <div className="p-2 rounded-lg bg-slate-100 text-slate-400">
                           <Layers size={14} />
                         </div>
-                        <span className="text-[0.65rem] font-black text-slate-800 uppercase tracking-tight">
+                        <span className="text-[0.75rem] font-black text-slate-800 uppercase tracking-tight">
                           {l.phase || 'Generale'}
                         </span>
                       </div>
@@ -1205,7 +1151,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                         <p className="text-sm font-black text-slate-800">
                           € {(((l.hours * l.hourly_cost) + (l.travel_cost || 0.0)) * (1 + l.markup)).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </p>
-                        <p className="text-[0.55rem] font-black text-emerald-500 uppercase tracking-widest">
+                        <p className="text-[0.7rem] font-black text-emerald-500 uppercase tracking-widest">
                           Ric. {(l.markup * 100).toFixed(0)}%
                         </p>
                       </div>
@@ -1251,7 +1197,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                       {hasActiveFilters && (
                         <button 
                           onClick={() => setFilters(initialFilters)}
-                          className="mt-4 text-accent font-black uppercase tracking-[0.2em] text-[0.6rem] hover:tracking-[0.3em] transition-all"
+                          className="mt-4 text-accent font-black uppercase tracking-[0.2em] text-[0.72rem] hover:tracking-[0.3em] transition-all"
                         >
                           Resetta Filtri
                         </button>
@@ -1301,7 +1247,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                 </span>
                 <div className="h-4 w-px bg-white/20"></div>
                 <span className="text-xs font-medium text-slate-300">
-                  {isPhase ? 'Cambio ambito per ' : 'Sposto '} {pendingMove.laborIds.length} {pendingMove.laborIds.length === 1 ? 'registrazione' : 'registrazioni'} in <strong className="text-white font-black">{isPhase ? pendingMove.targetPhase : pendingMove.targetCCName}</strong> ({countdown}s)
+                  {isPhase ? 'Cambio ambito per ' : 'Sposto '} {pendingMove.ids.length} {pendingMove.ids.length === 1 ? 'registrazione' : 'registrazioni'} in <strong className="text-white font-black">{isPhase ? pendingMove.payload.targetPhase : pendingMove.payload.targetCCName}</strong> ({countdown}s)
                 </span>
                 <div className="h-4 w-px bg-white/20"></div>
                 <div className="flex items-center gap-4">
@@ -1312,13 +1258,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                     Annulla
                   </button>
                   <button 
-                    onClick={() => {
-                      if (isPhase) {
-                        executePendingPhaseUpdate(pendingMove.targetPhase, pendingMove.laborIds);
-                      } else {
-                        executePendingMove(pendingMove.targetCCId, pendingMove.laborIds);
-                      }
-                    }}
+                    onClick={runPendingNow}
                     className="text-xs font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
                   >
                     Conferma Ora
@@ -1360,7 +1300,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                                 startPendingMove('general');
                                 setIsMoveOpen(false);
                               }}
-                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                             >
                               <span>Generale</span>
                             </button>
@@ -1373,7 +1313,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                                 startPendingMove(cc.id.toString());
                                 setIsMoveOpen(false);
                               }}
-                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                              className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                             >
                               <span>{cc.brand ? `${cc.brand} ` : ''}{cc.model} ({cc.category})</span>
                             </button>
@@ -1411,7 +1351,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                             startPendingPhaseUpdate('Generale');
                             setIsPhaseOpen(false);
                           }}
-                          className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                          className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                         >
                           <span>Generale</span>
                         </button>
@@ -1423,7 +1363,7 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
                               startPendingPhaseUpdate(p.id);
                               setIsPhaseOpen(false);
                             }}
-                            className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.65rem] font-black uppercase tracking-widest text-left cursor-pointer"
+                            className="w-full flex items-center justify-between p-3.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white transition-all text-[0.75rem] font-black uppercase tracking-widest text-left cursor-pointer"
                           >
                             <span>{p.label}</span>
                           </button>
