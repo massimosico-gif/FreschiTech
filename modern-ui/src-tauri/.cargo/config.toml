@@ -1,0 +1,8 @@
+# Cargo scarica le dipendenze git con libgit2, che per un repository PRIVATO
+# non sa autenticarsi: fallisce con un "authentication failed" poco chiaro.
+# Con questa opzione delega a `git`, che usa il credential helper del sistema
+# (Portachiavi su macOS, Git Credential Manager su Windows).
+#
+# Serve perche' `tecno-core` vive in massimosico-gif/TauriKit, privato.
+[net]
+git-fetch-with-cli = true

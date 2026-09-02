@@ -172,6 +172,31 @@ dentro il bundle JavaScript via `import.meta.env.VITE_TELEGRAM_BOT_TOKEN`. Ora l
 `send_logs_to_developer`, parte solo su richiesta esplicita dell'utente e allega **solo il file di
 log**, che per costruzione riporta esiti e mai payload. Non reintrodurre invii automatici di dati.
 
+## Compilare su un'altra macchina (Windows)
+
+`tecno-core` arriva dal repository **privato** `massimosico-gif/TauriKit`. Non serve clonarlo a
+mano: lo scarica cargo. Servono però due cose sulla macchina.
+
+**1. Cargo deve potersi autenticare.** `src-tauri/.cargo/config.toml` imposta già
+`net.git-fetch-with-cli = true`, così cargo delega a `git` invece di usare libgit2, che su un
+repository privato fallisce con un messaggio poco chiaro. Su Windows le credenziali le gestisce
+Git Credential Manager: basta che un `git clone` o `git fetch` verso GitHub sia già andato a buon
+fine una volta.
+
+**2. I segreti locali, che non stanno nel repository.** Su Windows vanno in `%USERPROFILE%\.freschitech\`,
+l'equivalente di `~/.freschitech/` su macOS:
+
+| File | Serve per |
+| --- | --- |
+| `db_key` | migrare i database cifrati delle installazioni più vecchie |
+| `diagnostics.json` | far funzionare "Invia Report" dai computer dei clienti |
+
+Senza, la build **riesce lo stesso** ma stampa un warning e quelle due funzioni restano inattive:
+è un compromesso voluto, non un errore da ignorare.
+
+Per aggiornare `tecno-core` a una versione più recente: `cargo update -p tecno-core`. Finché non lo
+fai, `Cargo.lock` tiene fisso il commit, quindi le due macchine compilano lo stesso codice.
+
 ## Segreti e configurazione locale
 
 Nessun segreto sta nel codice sorgente. Servono file locali **non versionati**:

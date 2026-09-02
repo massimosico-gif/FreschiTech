@@ -4305,6 +4305,7 @@ dependencies = [
 [[package]]
 name = "tecno-core"
 version = "0.1.0"
+source = "git+https://github.com/massimosico-gif/TauriKit#ce13a8c12c325605387d389157aeb1c57a34956f"
 dependencies = [
  "chrono",
  "directories",
@@ -4321,6 +4322,7 @@ dependencies = [
 [[package]]
 name = "tecno-core-build"
 version = "0.1.0"
+source = "git+https://github.com/massimosico-gif/TauriKit#ce13a8c12c325605387d389157aeb1c57a34956f"
 
 [[package]]
 name = "tempfile"
