@@ -45,7 +45,11 @@ PDF esempio (eliminare a test finiti)
 # (letti da build.rs e incorporati nel binario, vedi CLAUDE.md)
 # ---------------------------------------------------------------------------
 GitHubToken.env
-signing_key.txt
+# Qualunque variante, non solo il nome esatto: generando una chiave come
+# `signing_key_nuova.txt` si otterrebbe un file NON ignorato con dentro una
+# chiave privata, in un repository pubblico.
+signing_key*.txt
+signing_key*.txt.pub
 modern-ui/src-tauri/secrets/
 db_key
 diagnostics.json
