@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { 
   BarChart, 
@@ -20,12 +20,38 @@ import {
 } from 'lucide-react'
 import { formatNumber } from '../utils/format'
 
+const LELY_RED = '#E30613'
+
+/*
+  Le props di recharts stanno fuori dal componente di proposito.
+  Recharts 3 tiene la configurazione del grafico in uno store interno e la
+  riscrive quando una prop cambia identita': oggetti e funzioni creati dentro
+  il render sono nuovi a ogni giro, quindi ogni render del componente produce
+  scritture nello store e altri render del grafico. Al mount quella catena di
+  aggiornamenti e' gia' profonda ed e' li' che salta il limite di React
+  ("Maximum update depth exceeded"). Tenendo l'identita' stabile la catena
+  resta corta.
+*/
+const TICK_STYLE = { fill: '#64748b', fontSize: 10, fontWeight: 700 }
+const BAR_RADIUS = [8, 8, 8, 8]
+const TOOLTIP_CURSOR = { fill: 'rgba(227, 6, 19, 0.05)', radius: 10 }
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  backdropFilter: 'blur(10px)',
+  border: '1px solid rgba(255, 255, 255, 0.5)',
+  borderRadius: '1.5rem',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+  padding: '1rem'
+}
+const TOOLTIP_ITEM_STYLE = { color: LELY_RED, fontWeight: 900 }
+const TOOLTIP_LABEL_STYLE = { color: '#0f172a', fontWeight: 900, marginBottom: '0.5rem' }
+
+const formatEuro = (value) => `€${value}`
+
 const Dashboard = () => {
   const [data, setData] = useState([])
   const [stats, setStats] = useState([])
   const [loading, setLoading] = useState(true)
-
-  const LELY_RED = '#E30613'
 
   useEffect(() => {
     invoke('get_stats')
@@ -48,12 +74,24 @@ const Dashboard = () => {
       })
   }, [])
 
+  // Le <Cell> sono figlie di <Bar>: ricrearle a ogni render fa ripartire le
+  // stesse scritture nello store di recharts.
+  const cells = useMemo(
+    () => data.map((entry, index) => (
+      <Cell 
+        key={`cell-${index}`} 
+        fill={entry.total > 4000 ? LELY_RED : 'rgba(227, 6, 19, 0.4)'} 
+      />
+    )),
+    [data]
+  )
+
   if (loading) return <div className="p-20 text-center font-black uppercase tracking-widest text-slate-400">Caricamento dati...</div>
 
   return (
-    <div className="space-y-8 animate-premium-in">
+    <div className="space-y-8">
       {/* Griglia Statistiche */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-premium-in">
         {stats.map((stat, idx) => (
           <div 
             key={idx} 
@@ -89,46 +127,43 @@ const Dashboard = () => {
           </div>
 
           <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            {/*
+              `debounce` accorpa le notifiche del ResizeObserver: ogni misura
+              diversa del contenitore e' un altro render del grafico, con le
+              relative scritture nello store. Per lo stesso motivo l'animazione
+              di ingresso (una scale()) e' stata spostata sulla sola griglia
+              delle statistiche: sotto scale() getBoundingClientRect, che
+              recharts usa per la misura iniziale, dava 295.44 dove il
+              ResizeObserver dava 296.
+            */}
+            <ResponsiveContainer width="100%" height="100%" debounce={50}>
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(15, 23, 42, 0.05)" />
                 <XAxis 
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                  tick={TICK_STYLE}
                   dy={10}
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                  tickFormatter={(value) => `€${value}`}
+                  tick={TICK_STYLE}
+                  tickFormatter={formatEuro}
                 />
                 <Tooltip 
-                  cursor={{ fill: 'rgba(227, 6, 19, 0.05)', radius: 10 }}
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.5)', 
-                    borderRadius: '1.5rem', 
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-                    padding: '1rem'
-                  }}
-                  itemStyle={{ color: LELY_RED, fontWeight: 900 }}
-                  labelStyle={{ color: '#0f172a', fontWeight: 900, marginBottom: '0.5rem' }}
+                  cursor={TOOLTIP_CURSOR}
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
                 />
                 <Bar 
                   dataKey="total" 
-                  radius={[8, 8, 8, 8]} 
+                  radius={BAR_RADIUS} 
                   barSize={24}
                 >
-                  {data.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.total > 4000 ? LELY_RED : 'rgba(227, 6, 19, 0.4)'} 
-                    />
-                  ))}
+                  {cells}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
