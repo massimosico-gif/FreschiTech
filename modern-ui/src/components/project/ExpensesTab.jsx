@@ -23,8 +23,8 @@ import Select from '../ui/Select'
 import MultiSelect from '../ui/MultiSelect'
 import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
-import ConfirmModal from '../ui/ConfirmModal'
-import { useToast } from '../../hooks/useFeedback'
+import { ConfirmModal } from '@tecno/ui/feedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = null, projectId = null, onSave = null }) => {
   const toast = useToast()
@@ -670,8 +670,8 @@ const ExpensesTab = ({ expenses, costCenters, onDelete, defaultCostCenterId = nu
         }}
         title="Elimina Spesa"
         message="Sei sicuro di voler eliminare definitivamente questa spesa? L'azione è irreversibile."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
     </div>

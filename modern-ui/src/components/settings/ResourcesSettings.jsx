@@ -12,9 +12,9 @@ import {
   Truck
 } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import DrawerShell from '../ui/DrawerShell'
-import { useToast } from '../../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const ResourcesSettings = () => {
   const toast = useToast()

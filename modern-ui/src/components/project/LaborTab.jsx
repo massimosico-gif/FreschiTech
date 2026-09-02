@@ -27,8 +27,8 @@ import MultiSelect from '../ui/MultiSelect'
 import DatePicker from '../ui/DatePicker'
 import PhaseSelector from '../ui/PhaseSelector'
 import VehicleSelector from '../ui/VehicleSelector'
-import ConfirmModal from '../ui/ConfirmModal'
-import { useToast } from '../../hooks/useFeedback'
+import { ConfirmModal } from '@tecno/ui/feedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, projectId = null, project = null, onSave = null, onRefresh = null }) => {
   const toast = useToast()
@@ -1280,8 +1280,8 @@ const LaborTab = ({ labor, costCenters, onDelete, defaultCostCenterId = null, pr
         }}
         title="Elimina Ore Manodopera"
         message="Sei sicuro di voler eliminare definitivamente questa registrazione di manodopera? L'azione è irreversibile."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
 

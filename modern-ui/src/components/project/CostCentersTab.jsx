@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { Plus, Target, Search, Layers, RotateCcw, Briefcase, Euro, Activity } from 'lucide-react'
 import EntityCard from '../ui/EntityCard'
 import Select from '../ui/Select'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 
 const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) => {
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
@@ -170,8 +170,8 @@ const CostCentersTab = ({ costCenters, onAdd, onEdit, onDelete, onClickCard }) =
         }}
         title="Elimina Centro di Costo"
         message="Sei sicuro di voler eliminare definitivamente questo centro di costo? Tutti i materiali, la manodopera e le spese associate a questo centro perderanno questo riferimento."
-        confirmText="Elimina"
-        cancelText="Annulla"
+        confirmLabel="Elimina"
+        cancelLabel="Annulla"
         type="danger"
       />
     </div>

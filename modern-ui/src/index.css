@@ -1,12 +1,20 @@
 @import "tailwindcss";
 
+/*
+  Tailwind non analizza node_modules: senza questa riga le classi usate SOLO
+  dai componenti di @tecno/ui (la notifica, la finestra di conferma) non
+  finirebbero nel CSS e quei componenti apparirebbero senza stile. Niente lo
+  segnalerebbe: non e' un errore, e' una regola che non viene generata.
+*/
+@source "../node_modules/@tecno/ui/core/tecno-ui/src";
+
 @theme {
   --color-accent: #E30613;
   --color-accent-hover: #C20510;
 }
 
 /* 
-  TecnoRilievi Modern UI - Design System
+  FreschiTech Modern UI - Design System
   Modularized Stylesheet
 */
 

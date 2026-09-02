@@ -9,7 +9,7 @@ import {
 import DrawerShell from './ui/DrawerShell'
 import CategorySelector from './ui/CategorySelector'
 import { CostCenter } from '../types'
-import { useToast } from '../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 interface EditCostCenterDrawerProps {
   isOpen: boolean;

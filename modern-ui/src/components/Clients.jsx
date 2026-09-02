@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { Plus, Search, Building2, User, Mail, MapPin, Loader2, Users, ArrowLeft, Briefcase, Phone } from 'lucide-react'
 import EntityCard from './ui/EntityCard'
 import EditClientDrawer from './EditClientDrawer'
-import ConfirmModal from './ui/ConfirmModal'
-import { useToast } from '../hooks/useFeedback'
+import { ConfirmModal } from '@tecno/ui/feedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const formatCurrency = (value) => {
   const num = Number(value || 0);

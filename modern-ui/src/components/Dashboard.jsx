@@ -18,7 +18,7 @@ import {
   BarChart3,
   Euro
 } from 'lucide-react'
-import { formatNumber } from '../utils/format'
+import { formatAmount } from '@tecno/ui'
 
 const LELY_RED = '#E30613'
 
@@ -59,12 +59,12 @@ const Dashboard = () => {
         setData(resData.chart_data || [])
         
         setStats([
-          { label: 'Totale Preventivato', value: `€ ${formatNumber(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
+          { label: 'Totale Preventivato', value: `€ ${formatAmount(resData.total_revenue)}`, icon: <TrendingUp size={24} />, color: LELY_RED },
           { label: 'Progetti Attivi', value: resData.invoices_count.toString(), icon: <FileText size={24} />, color: '#3b82f6' },
           { label: 'Clienti Lely', value: resData.clients_count.toString(), icon: <Users size={24} />, color: '#8b5cf6' },
-          { label: 'Costi Totali Cantieri', value: `€ ${formatNumber(resData.total_pending)}`, icon: <CreditCard size={24} />, color: '#f43f5e' },
-          { label: 'Utile Previsto', value: `€ ${formatNumber(resData.utile_previsto)}`, icon: <BarChart3 size={24} />, color: '#10b981' },
-          { label: 'Utile Effettivo (Rispetto al budget)', value: `€ ${formatNumber(resData.utile_effettivo)}`, icon: <Euro size={24} />, color: '#06b6d4' },
+          { label: 'Costi Totali Cantieri', value: `€ ${formatAmount(resData.total_pending)}`, icon: <CreditCard size={24} />, color: '#f43f5e' },
+          { label: 'Utile Previsto', value: `€ ${formatAmount(resData.utile_previsto)}`, icon: <BarChart3 size={24} />, color: '#10b981' },
+          { label: 'Utile Effettivo (Rispetto al budget)', value: `€ ${formatAmount(resData.utile_effettivo)}`, icon: <Euro size={24} />, color: '#06b6d4' },
         ])
         setLoading(false)
       })
