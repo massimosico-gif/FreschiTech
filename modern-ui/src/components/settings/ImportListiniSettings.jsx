@@ -26,7 +26,7 @@ import {
   X,
   Briefcase
 } from 'lucide-react'
-import ConfirmModal from '../ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import Select from '../ui/Select'
 
 const ImportListiniSettings = () => {
@@ -1269,8 +1269,8 @@ const ImportListiniSettings = () => {
     onConfirm={executeClearCatalog}
     title="Svuota Catalogo Listini"
     message="Sei sicuro di voler svuotare completamente il catalogo dei listini? Questa azione è irreversibile e cancellerà tutti gli articoli caricati."
-    confirmText="Sì, svuota"
-    cancelText="Annulla"
+    confirmLabel="Sì, svuota"
+    cancelLabel="Annulla"
     type="danger"
   />
 
@@ -1621,8 +1621,8 @@ const ImportListiniSettings = () => {
     onConfirm={executeImportPdf}
     title={isXmlFile ? "Conferma Aggiornamento Listino da XML" : "Conferma Aggiornamento Listino da PDF"}
     message={isXmlFile ? "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file XML della fattura?" : "Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file PDF?"}
-    confirmText="Sì, procedi"
-    cancelText="Annulla"
+    confirmLabel="Sì, procedi"
+    cancelLabel="Annulla"
     type="warning"
   />
 
@@ -1635,8 +1635,8 @@ const ImportListiniSettings = () => {
     onConfirm={executeSaveRow}
     title="Salva Modifica Articolo"
     message="Confermi la modifica di questo articolo? Le modifiche verranno salvate nel catalogo."
-    confirmText="Sì, salva"
-    cancelText="Annulla"
+    confirmLabel="Sì, salva"
+    cancelLabel="Annulla"
     type="warning"
   />
 
@@ -1649,8 +1649,8 @@ const ImportListiniSettings = () => {
     onConfirm={executeDeleteRow}
     title="Elimina Articolo"
     message="Sei sicuro di voler eliminare questo articolo dal catalogo? Questa azione è irreversibile."
-    confirmText="Sì, elimina"
-    cancelText="Annulla"
+    confirmLabel="Sì, elimina"
+    cancelLabel="Annulla"
     type="danger"
   />
 </div>

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 
 // UI Components
-import ConfirmModal from './ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 
 // Project Sub-components
 import ProjectHeader from './project/ProjectHeader'
@@ -41,7 +41,7 @@ import useProjectStore, {
   useFilteredExpenses, 
   useActiveCC 
 } from '../hooks/useProjectStore'
-import { useToast } from '../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 
 const ProjectDetails = ({ projectId, onBack }) => {

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import FeedbackProvider from './components/ui/FeedbackProvider.jsx'
+import { FeedbackProvider } from '@tecno/ui/feedback'
 
 // Intercetta tutti i log console.error per scriverli nel file di log di Rust
 const originalConsoleError = console.error;

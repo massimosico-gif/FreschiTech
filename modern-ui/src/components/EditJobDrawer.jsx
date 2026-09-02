@@ -15,7 +15,7 @@ import ClientSelector from './ui/ClientSelector'
 import DatePicker from './ui/DatePicker'
 import Select from './ui/Select'
 import EditClientDrawer from './EditClientDrawer'
-import { useToast } from '../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const EditJobDrawer = ({ isOpen, onClose, job, onSave }) => {
   const toast = useToast()

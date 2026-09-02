@@ -40,6 +40,24 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2.1.0"
 tauri-plugin-updater = "2"
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "backup"] }
 directories = "5.0"
 calamine = "0.24"
+
+# SQLCipher ha bisogno di un fornitore di crittografia, e non e' lo stesso sulle
+# due piattaforme: su macOS c'e' CommonCrypto nel sistema, su Windows serve
+# OpenSSL compilata da sorgente per poterla legare STATICAMENTE.
+#
+# Queste due sezioni ricalcano quelle di `tecno-core`. Sono qui perche' anche
+# `db.rs` e `commands.rs` usano rusqlite direttamente, e cargo unifica le
+# feature: una riga senza distinzione di piattaforma funzionerebbe comunque,
+# ma sarebbe una seconda dichiarazione capace di divergere da quella condivisa.
+#
+# NON impostare OPENSSL_DIR per aggirare la compilazione: fa passare
+# libsqlite3-sys al collegamento dinamico, e il pacchetto parte sulla macchina
+# di sviluppo ma non su quelle dei clienti, che quella libreria non ce l'hanno.
+# Vale in particolare qui, che si distribuisce solo su Windows.
+[target.'cfg(not(windows))'.dependencies]
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "backup"] }
+
+[target.'cfg(windows)'.dependencies]
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl", "backup"] }

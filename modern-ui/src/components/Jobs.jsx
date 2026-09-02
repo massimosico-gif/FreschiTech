@@ -3,9 +3,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { Plus, Search, Briefcase, Loader2, Calendar, User, Activity } from 'lucide-react'
 import EntityCard from './ui/EntityCard'
 import EditJobDrawer from './EditJobDrawer'
-import ConfirmModal from './ui/ConfirmModal'
+import { ConfirmModal } from '@tecno/ui/feedback'
 import Select from './ui/Select'
-import { useToast } from '../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const Jobs = ({ onOpenProject }) => {
   const toast = useToast()

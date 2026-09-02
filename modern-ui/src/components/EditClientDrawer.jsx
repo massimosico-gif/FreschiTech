@@ -9,9 +9,9 @@ import {
   AlertCircle,
   MapPin
 } from 'lucide-react'
-import { validateVAT, validateTaxCode } from '../utils/validation'
+import { validateVAT, validateTaxCode } from '@tecno/ui'
 import DrawerShell from './ui/DrawerShell'
-import { useToast } from '../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const EditClientDrawer = ({ isOpen, onClose, client, onSave }) => {
   const toast = useToast()

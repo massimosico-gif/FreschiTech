@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { Database, Download, AlertTriangle, Loader2, Save, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import FormInput from '../ui/FormInput'
-import { useToast } from '../../hooks/useFeedback'
-import { useConfirm } from '../../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
+import { useConfirm } from '@tecno/ui/feedback'
 
 const MaintenanceSettings = () => {
   const confirm = useConfirm()

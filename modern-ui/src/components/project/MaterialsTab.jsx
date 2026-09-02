@@ -22,8 +22,8 @@ import {
 import Select from '../ui/Select'
 import PhaseSelector from '../ui/PhaseSelector'
 import DatePicker from '../ui/DatePicker'
-import ConfirmModal from '../ui/ConfirmModal'
-import { useToast } from '../../hooks/useFeedback'
+import { ConfirmModal } from '@tecno/ui/feedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const MaterialsTab = ({ materials, costCenters, onAdd, onEdit, onDelete, defaultCostCenterId = null, projectId, onSave, onRefresh }) => {
   const toast = useToast()

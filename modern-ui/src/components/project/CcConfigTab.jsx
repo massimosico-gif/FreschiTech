@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Euro, Truck, Wrench, Percent, Save, Check } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import Card from '../ui/Card'
-import { useToast } from '../../hooks/useFeedback'
+import { useToast } from '@tecno/ui/feedback'
 
 const CcConfigTab = ({ costCenter, onSave }) => {
   const toast = useToast()

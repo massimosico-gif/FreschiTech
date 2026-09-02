@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Percent, CreditCard, Briefcase, Plus, Save, Trash2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import FormInput from '../ui/FormInput'
-import { useConfirm } from '../../hooks/useFeedback'
+import { useConfirm } from '@tecno/ui/feedback'
 
 const TaxPaymentSettings = () => {
   const confirm = useConfirm()
