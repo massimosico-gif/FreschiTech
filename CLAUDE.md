@@ -17,11 +17,24 @@ che spiegano il bug corretto — sono documentazione, non rumore.
 | --- | --- |
 | `modern-ui/src/` | Frontend (React 19 + Vite 8 + Tailwind 4) |
 | `modern-ui/src-tauri/` | Backend Rust: identità dell'app, schema, comandi di dominio |
-| `release_app.py` | Tooling di release (build, firma, pubblicazione GitHub + Gist) |
+| `release_manager_windows.py` | Release manager con GUI pywebview: **solo la finestra**, le operazioni stanno in `tecno_release` |
+| `release_config.py`, `signing_key.py` | Configurazione di release e caricamento della chiave di firma |
 
-**L'infrastruttura non è qui.** Database, migrazioni, backup, logging, diagnostica e hook sui panic
-vivono nel crate condiviso `tecno-core` di TauriKit. Un bug lì si corregge una volta sola, per
-tutte le applicazioni: non ricopiare quel codice dentro questo repository.
+**L'infrastruttura non è qui.** Tre pacchetti di TauriKit (repo privato
+`massimosico-gif/TauriKit`) contengono ciò che non deve divergere fra le applicazioni. Un bug lì si
+corregge una volta sola: non ricopiare quel codice dentro questo repository.
+
+| Pacchetto | Cosa contiene | Come si aggiorna |
+| --- | --- | --- |
+| `tecno-core` (cargo) | Database, migrazioni, backup, logging, diagnostica, hook sui panic | `cargo update -p tecno-core` |
+| `@tecno/ui` (npm) | `validateVAT`, `validateTaxCode`, `parseNumber`/`formatAmount`…, `Toast`, `ConfirmModal`, `FeedbackProvider`, `useToast`/`useConfirm` | `npm --prefix modern-ui update @tecno/ui` |
+| `tecno_release` (pip) | Allineamento della versione, ricerca dell'installer, release GitHub, manifest dell'updater | `pip install --upgrade --force-reinstall "git+…#subdirectory=core/tecno-release"` |
+
+Il pacchetto Python va installato una volta per macchina:
+
+```bash
+pip install "git+https://github.com/massimosico-gif/TauriKit#subdirectory=core/tecno-release"
+```
 
 ## Comandi
 
@@ -46,7 +59,10 @@ sostituiti dal mock. Serve a iterare sull'interfaccia senza ricompilare Rust:
 npm --prefix modern-ui run dev:web
 ```
 
-Test JS (vitest):
+Test JS (vitest). **Non ce ne sono**: l'unico era su `FeedbackProvider`, che ora vive in
+TauriKit insieme al componente (`cd ~/Desktop/Tauri/TauriKit && npm test`). Il codice di dominio di
+FreschiTech — i calcoli finanziari, l'importazione dei listini — non ne ha mai avuti, e il comando
+usa `--passWithNoTests` perché lo dica invece di fallire:
 
 ```bash
 npm --prefix modern-ui test
@@ -64,11 +80,20 @@ Compilazione nativa completa (lenta, produce il bundle):
 npm --prefix modern-ui run tauri build
 ```
 
-Release completa (bump versione → build → tar.gz → firma → GitHub release → aggiornamento Gist):
+Release completa (bump versione → build → firma → GitHub release → aggiornamento Gist). Si pubblica
+**solo per Windows**, con la finestra del release manager:
 
 ```bash
-python3 release_app.py
+python release_manager_windows.py
 ```
+
+Doppio clic: `Avvia_Release_Manager.bat`. Le operazioni sono in `tecno_release`; qui restano la
+finestra e la configurazione (`release_config.py`).
+
+**Il manifest dell'updater è uno per tutte le piattaforme, ma le release si fanno una piattaforma
+alla volta.** Usa `pubblica_manifest`, che rilegge le voci esistenti e sostituisce solo quelle
+passate: scrivere `platforms` da capo cancellerebbe la piattaforma non toccata il giorno in cui
+FreschiTech venisse pubblicata anche per macOS.
 
 ## Architettura
 
@@ -138,12 +163,28 @@ I panic del backend finiscono in `~/.freschitech/crash.log`.
 
 - **Niente `window.alert` / `window.confirm`**: in WKWebView sono modali sul processo e bloccano il
   rendering. Si usano `useToast()` (`toast.success` / `toast.error`) e `useConfirm()` da
-  `hooks/useFeedback`, forniti da `<FeedbackProvider>` in `main.jsx`. La conferma restituisce una
-  `Promise<boolean>`, quindi il chiamante resta lineare:
+  **`@tecno/ui/feedback`**, forniti da `<FeedbackProvider>` in `main.jsx`. La conferma restituisce
+  una `Promise<boolean>`, quindi il chiamante resta lineare:
   `if (!(await confirm({...}))) return`.
-- Il colore brand vive in **due file soli**: `tailwind.config.js` (token `accent`) e
-  `src/styles/variables.css` (`--accent-color`, `--accent-rgb`). Nei componenti si usa `bg-accent`,
-  `text-accent`, `hover:bg-accent-hover` — mai il valore esadecimale.
+- `ConfirmModal` usa **`confirmLabel` / `cancelLabel`**, non `confirmText` / `cancelText`. Una prop
+  sconosciuta in React viene ignorata senza errore: sbagliando nome i pulsanti tornano in silenzio
+  alle etichette predefinite, ed è successo — cinque punti ne avevano di personalizzate, fra cui un
+  salvataggio che sarebbe diventato "Elimina".
+- **Per gli importi si usa `formatAmount`, non `formatNumber`.** Il `formatNumber` di `@tecno/ui`
+  non raggruppa le migliaia, perché serve dentro i campi modificabili; `formatAmount` sì e impone
+  due decimali. Sono nomi diversi da quelli che c'erano qui: il vecchio `formatNumber` locale
+  faceva quello che ora si chiama `formatAmount`.
+- **Validazione fiscale da `@tecno/ui`.** `validateTaxCode` accetta anche la partita IVA a undici
+  cifre usata come codice fiscale, che per le persone giuridiche è il caso normale: quello locale
+  pretendeva sedici caratteri e la rifiutava.
+- Il colore brand vive in **due file**: il blocco `@theme` di `src/index.css`
+  (`--color-accent`, che genera le classi `bg-accent`/`text-accent`/`hover:bg-accent-hover`) e
+  `src/styles/variables.css` (`--accent-color`, `--accent-rgb`), da cui lo prendono i componenti di
+  `@tecno/ui`. Mai il valore esadecimale. Il `tailwind.config.js` in cartella **non viene letto**:
+  con Tailwind 4 servirebbe un `@config` nel CSS, ed è il blocco `@theme` a fare quel lavoro.
+- **`src/index.css` deve dichiarare `@source` per `@tecno/ui`.** Tailwind non analizza
+  `node_modules`: senza quella riga le classi usate solo dai componenti condivisi non finiscono nel
+  CSS e quei componenti appaiono senza stile — senza alcun errore a segnalarlo.
 - Ogni `invoke` va con il suo `catch`: il backend restituisce messaggi già scritti per l'utente, e
   una promise rifiutata senza `catch` sparisce nella console del webview.
 
@@ -166,6 +207,14 @@ La CSP in `tauri.conf.json` è ancora `null`, cioè assente. Stringerla come nel
 TauriKit è il passo successivo, ma prima va tolto il caricamento dei font da Google Fonts in
 `index.html`: l'app deve funzionare offline e quella richiesta remota bloccherebbe il primo paint.
 
+**La chiave di firma degli aggiornamenti va rigenerata.** Era una stringa letterale in
+`release_manager_windows.py`, su un repository **pubblico**, protetta da una password vuota:
+chiunque poteva leggerla e firmare un pacchetto che tutte le installazioni accettano come autentico.
+Ora la legge `signing_key.py` da `signing_key.txt`, non versionato — ma **resta nella storia di git**
+dal commit `8f566bf`, quindi spostarla non la rende segreta. Le istruzioni per rigenerarla, e il suo
+costo (le installazioni esistenti rifiuteranno gli aggiornamenti firmati con la nuova chiave e
+andranno reinstallate una volta), sono in cima a `signing_key.py`.
+
 **La diagnostica non deve mai spedire dati.** Una versione precedente caricava su Telegram il file
 di database completo — a ogni panic e a ogni record di livello `Error` — e teneva il token del bot
 dentro il bundle JavaScript via `import.meta.env.VITE_TELEGRAM_BOT_TOKEN`. Ora l'invio passa da
@@ -174,14 +223,24 @@ log**, che per costruzione riporta esiti e mai payload. Non reintrodurre invii a
 
 ## Compilare su un'altra macchina (Windows)
 
-`tecno-core` arriva dal repository **privato** `massimosico-gif/TauriKit`. Non serve clonarlo a
-mano: lo scarica cargo. Servono però due cose sulla macchina.
+`tecno-core` e `@tecno/ui` arrivano dal repository **privato** `massimosico-gif/TauriKit`. Non
+serve clonarlo a mano: li scaricano cargo e npm. Servono però due cose sulla macchina.
 
-**1. Cargo deve potersi autenticare.** `src-tauri/.cargo/config.toml` imposta già
+**1. Cargo e npm devono potersi autenticare.** `src-tauri/.cargo/config.toml` imposta già
 `net.git-fetch-with-cli = true`, così cargo delega a `git` invece di usare libgit2, che su un
 repository privato fallisce con un messaggio poco chiaro. Su Windows le credenziali le gestisce
 Git Credential Manager: basta che un `git clone` o `git fetch` verso GitHub sia già andato a buon
-fine una volta.
+fine una volta, e la stessa condizione basta a npm.
+
+`package.json` dichiara `@tecno/ui` come `git+https://…`. Nel `package-lock.json` npm registra
+comunque la forma `git+ssh://`: non è un problema, perché quando la chiave SSH manca npm ritenta in
+HTTPS. La forma esplicita nel `package.json` dice però qual è il canale su cui contare.
+
+**3. Per pubblicare, anche `tecno_release`**, che pip non installa da solo:
+
+```bash
+pip install "git+https://github.com/massimosico-gif/TauriKit#subdirectory=core/tecno-release"
+```
 
 **2. I segreti locali, che non stanno nel repository.** Su Windows vanno in `%USERPROFILE%\.freschitech\`,
 l'equivalente di `~/.freschitech/` su macOS:
@@ -208,6 +267,10 @@ Nessun segreto sta nel codice sorgente. Servono file locali **non versionati**:
 | Credenziali Telegram diagnostica | `~/.freschitech/diagnostics.json` | `send_logs_to_developer`, anche dai computer dei clienti |
 | Token GitHub | `GitHubToken.env` / `.env` / `GITHUB_TOKEN` | Script di release |
 
+Il token in `GitHubToken.env` è **scaduto** (GitHub risponde 401 "Bad credentials"): va rigenerato
+prima della prossima release. La procedura ora si ferma con un messaggio esplicito invece di
+proseguire su un manifest letto vuoto.
+
 I valori incorporati da `build.rs` **finiscono nel binario** e restano estraibili con `strings`:
 il segreto sta fuori dal repository, non fuori dall'app. Usare un bot Telegram dedicato solo a
 questo.
@@ -215,8 +278,12 @@ questo.
 ## Versionamento
 
 La versione va tenuta allineata in **tre file**: `VERSION` (fonte di verità),
-`modern-ui/package.json` e `modern-ui/src-tauri/tauri.conf.json`. `release_app.py` lo fa
-automaticamente; se bumpi a mano, aggiornali tutti e tre.
+`modern-ui/package.json` e `modern-ui/src-tauri/tauri.conf.json`. `tecno_release.scrivi_versione`
+lo fa automaticamente; se bumpi a mano, aggiornali tutti e tre.
+
+Attenzione: su `main` il file `VERSION` dice **1.2.1**, ma la release pubblicata è la **1.3.0** (il
+lavoro sta sul ramo `release/1.3.0`). Il release manager propone quello che legge da `VERSION`,
+quindi va corretto prima di pubblicare, altrimenti si ripubblica all'indietro.
 
 Nota: `env!("CARGO_PKG_VERSION")` restituisce `0.1.0`, la versione di `Cargo.toml`, non quella
 dell'app. Per la versione vera usa `app.package_info().version`.
