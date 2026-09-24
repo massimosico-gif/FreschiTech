@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
+import { nomeFile, unisciFatture } from '../../utils/fattureMultiple'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileSpreadsheet, 
@@ -51,7 +52,19 @@ const ImportListiniSettings = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
   // Import da fattura elettronica (XML)
-  const [selectedInvoicePath, setSelectedInvoicePath] = useState('')
+  /*
+    Piu' fatture insieme.
+
+    PERCHE' UNA LISTA E NON UN PERCORSO
+    -----------------------------------
+    Le fatture di un fornitore arrivano a gruppi, e caricarle una alla volta
+    significa ripetere selezione, riconciliazione e conferma per ognuna. Le
+    righe di file diversi confluiscono in un'unica tabella di riconciliazione:
+    l'importazione resta una sola transazione, quindi o entra tutto o niente.
+  */
+  const [selectedInvoicePaths, setSelectedInvoicePaths] = useState([])
+  // Esito per file: fornitore, righe trovate, oppure l'errore di lettura.
+  const [invoiceSources, setInvoiceSources] = useState([])
   const [invoiceImporting, setInvoiceImporting] = useState(false)
   const [invoiceItems, setInvoiceItems] = useState([])
   const [loadingInvoicePreview, setLoadingInvoicePreview] = useState(false)
@@ -123,18 +136,35 @@ const ImportListiniSettings = () => {
             setIsDragging(false)
           } else if (event.payload.type === 'drop') {
             setIsDragging(false)
-            if (event.payload.paths && event.payload.paths.length > 0) {
-              const filePath = event.payload.paths[0]
-              const ext = filePath.split('.').pop().toLowerCase()
-              if (['xlsx', 'xls', 'xlsm', 'xlsb', 'csv'].includes(ext)) {
-                setSelectedFilePath(filePath)
-                setSelectedInvoicePath('')
-                setStatus({ type: '', message: '' })
-              } else if (ext === 'xml') {
-                setSelectedInvoicePath(filePath)
+            const rilasciati = event.payload.paths || []
+            if (rilasciati.length > 0) {
+              // Prima si prendeva `paths[0]` e si ignorava il resto: chi
+              // trascinava un gruppo di fatture ne vedeva caricare una sola,
+              // senza che nulla dicesse che le altre erano state scartate.
+              const estensione = (f) => f.split('.').pop().toLowerCase()
+              const FOGLI = ['xlsx', 'xls', 'xlsm', 'xlsb', 'csv']
+
+              const xml = rilasciati.filter(f => estensione(f) === 'xml')
+              const fogli = rilasciati.filter(f => FOGLI.includes(estensione(f)))
+              const pdf = rilasciati.filter(f => estensione(f) === 'pdf')
+
+              if (xml.length) {
+                setSelectedInvoicePaths(xml)
                 setSelectedFilePath('')
-                setStatus({ type: '', message: '' })
-              } else if (ext === 'pdf') {
+                // Un listino non si riconcilia insieme alle fatture: se
+                // arrivano insieme si dice quale dei due si e' preso.
+                setStatus(fogli.length
+                  ? { type: 'warning', message: `Caricate ${xml.length} fatture XML. I ${fogli.length} file di listino sono stati ignorati: si importano separatamente.` }
+                  : { type: '', message: '' })
+              } else if (fogli.length) {
+                // Il listino resta a un file per volta: la riconciliazione di
+                // un listino non e' cumulativa come quella delle fatture.
+                setSelectedFilePath(fogli[0])
+                setSelectedInvoicePaths([])
+                setStatus(fogli.length > 1
+                  ? { type: 'warning', message: `Preso ${fogli[0].split(/[\\/]/).pop()}: i listini si importano uno alla volta.` }
+                  : { type: '', message: '' })
+              } else if (pdf.length) {
                 setStatus({ type: 'error', message: PDF_UNSUPPORTED_MESSAGE })
               } else {
                 setStatus({ type: 'error', message: 'Tipo di file non supportato. Seleziona un file Excel, CSV o XML.' })
@@ -185,57 +215,63 @@ const ImportListiniSettings = () => {
   }, [selectedFilePath])
 
   useEffect(() => {
-    if (!selectedInvoicePath) {
+    if (!selectedInvoicePaths.length) {
       setInvoiceItems([])
+      setInvoiceMappings([])
+      setInvoiceSources([])
       return
     }
 
     const fetchInvoicePreview = async () => {
       setLoadingInvoicePreview(true)
       setInvoiceItems([])
-      try {
-        // Il backend restituisce anche il fornitore letto dal blocco
-        // CedentePrestatore della fattura: prima era hardcoded lato frontend
-        // e tutti gli articoli finivano a listino sotto lo stesso nome.
-        const result = await invoke('parse_invoice_xml', { filePath: selectedInvoicePath })
-        const supplier = result.supplier || 'Fornitore Generico'
-        setInvoiceSupplier(supplier)
+      setInvoiceMappings([])
+      setInvoiceSources([])
 
-        setInvoiceItems(result.rows.map(r => ({
-          description: r.invoice_item.description,
-          unit: r.invoice_item.unit,
-          unit_price: r.invoice_item.unit_price,
-          supplier
-        })))
-
-        setInvoiceMappings(result.rows.map(r => ({
-          id: r.id,
-          invoiceRow: {
-            description: r.invoice_item.description,
-            unit: r.invoice_item.unit,
-            unit_price: r.invoice_item.unit_price,
-            supplier
-          },
-          suggestedItem: r.suggested_item,
-          matchScore: r.match_score,
-          action: r.action,
-          selectedCatalogItemId: r.selected_catalog_item_id,
-          customCode: r.custom_code,
-          invoiceItem: r.invoice_item,
-          markup: r.markup !== null && r.markup !== undefined ? r.markup : 0.0
-        })))
-
-        setIsImportOverlayOpen(true)
-      } catch (err) {
-        console.error("Errore caricamento anteprima:", err)
-        setStatus({ type: 'error', message: 'Impossibile leggere il file: ' + err })
-      } finally {
-        setLoadingInvoicePreview(false)
+      // La lettura e' qui perche' tocca il backend; l'unione delle righe sta
+      // in `unisciFatture`, fuori dal componente, dove e' sotto test: la
+      // rinumerazione degli id e il fornitore per riga sbagliano in silenzio.
+      const esiti = []
+      for (const percorso of selectedInvoicePaths) {
+        try {
+          // Il backend restituisce anche il fornitore letto dal blocco
+          // CedentePrestatore della fattura: prima era hardcoded lato frontend
+          // e tutti gli articoli finivano a listino sotto lo stesso nome.
+          const result = await invoke('parse_invoice_xml', { filePath: percorso })
+          esiti.push({ percorso, result })
+        } catch (err) {
+          // Un file illeggibile non fa perdere gli altri: si annota e si
+          // prosegue. Interrompere tutto costringerebbe a riselezionare
+          // l'intero gruppo per colpa di una fattura sola.
+          console.error(`Errore lettura ${nomeFile(percorso)}:`, err)
+          esiti.push({ percorso, error: err })
+        }
       }
+
+      const { righe, sorgenti } = unisciFatture(esiti)
+
+      setInvoiceSources(sorgenti)
+      setInvoiceMappings(righe)
+      setInvoiceItems(righe.map(r => r.invoiceRow))
+      // Ripiego per il parametro della chiamata: le righe portano il proprio.
+      setInvoiceSupplier(sorgenti.find(s => s.supplier)?.supplier || '')
+
+      const falliti = sorgenti.filter(s => s.error)
+      if (falliti.length) {
+        setStatus({
+          type: falliti.length === sorgenti.length ? 'error' : 'warning',
+          message: falliti.length === sorgenti.length
+            ? `Nessun file leggibile: ${falliti.map(f => f.file).join(', ')}`
+            : `${falliti.length} file su ${sorgenti.length} non leggibili (${falliti.map(f => f.file).join(', ')}): gli altri sono pronti.`
+        })
+      }
+
+      setLoadingInvoicePreview(false)
+      if (righe.length) setIsImportOverlayOpen(true)
     }
 
     fetchInvoicePreview()
-  }, [selectedInvoicePath])
+  }, [selectedInvoicePaths])
 
   useEffect(() => {
     if (isImportOverlayOpen) {
@@ -395,7 +431,7 @@ const ImportListiniSettings = () => {
       })
       if (selected) {
         setSelectedFilePath(selected)
-        setSelectedInvoicePath('')
+        setSelectedInvoicePaths([])
       }
     } catch (err) {
       setStatus({ type: 'error', message: 'Errore selezione file: ' + err })
@@ -429,23 +465,28 @@ const ImportListiniSettings = () => {
     try {
       setStatus({ type: '', message: '' })
       const selected = await openFileDialog({
-        multiple: false,
+        multiple: true,
         filters: [{
-          name: 'Fattura Elettronica XML',
+          name: 'Fatture Elettroniche XML',
           extensions: ['xml']
         }]
       })
-      if (selected) {
-        setSelectedInvoicePath(selected)
-        setSelectedFilePath('')
-      }
+      if (!selected) return
+
+      // Con `multiple: true` il selettore restituisce un array, ma con una
+      // sola scelta alcune versioni tornano la stringa: si normalizza.
+      const percorsi = Array.isArray(selected) ? selected : [selected]
+      if (!percorsi.length) return
+
+      setSelectedInvoicePaths(percorsi)
+      setSelectedFilePath('')
     } catch (err) {
       setStatus({ type: 'error', message: 'Errore selezione file: ' + err })
     }
   }
 
   const handleImportInvoice = () => {
-    if (!selectedInvoicePath) return
+    if (!invoiceMappings.length) return
     setIsImportConfirmOpen(true)
   }
 
@@ -462,7 +503,10 @@ const ImportListiniSettings = () => {
         action: m.action,
         selected_catalog_item_id: m.selectedCatalogItemId,
         custom_code: m.customCode,
-        markup: m.markup
+        markup: m.markup,
+        // Il fornitore viaggia con la riga: caricando piu' fatture insieme
+        // sono diversi, e il parametro della chiamata resta solo un ripiego.
+        supplier: m.supplier || null
       }))
 
       await invoke('import_invoice_mappings', {
@@ -472,12 +516,15 @@ const ImportListiniSettings = () => {
 
       const updated = rustMappings.filter(m => m.action === 'update').length
       const created = rustMappings.filter(m => m.action === 'create').length
+      const letti = invoiceSources.filter(s => !s.error).length
+      const daFile = letti > 1 ? ` da ${letti} fatture` : ''
       setStatus({
         type: 'success',
-        message: `Importazione XML completata! Elaborati ${updated + created} articoli (Aggiornati/Associati: ${updated}, Nuovi Creati: ${created}).`
+        message: `Importazione XML completata! Elaborati ${updated + created} articoli${daFile} (Aggiornati/Associati: ${updated}, Nuovi Creati: ${created}).`
       })
 
-      setSelectedInvoicePath('')
+      setSelectedInvoicePaths([])
+      setInvoiceSources([])
       setIsImportOverlayOpen(false)
       loadSummary()
     } catch (err) {
@@ -827,18 +874,20 @@ const ImportListiniSettings = () => {
                   </div>
                   <div className="text-center max-w-sm space-y-2">
                     <h4 className="text-md font-black text-slate-800 uppercase tracking-tight">
-                      {isDragging 
-                        ? 'Rilascia il file qui' 
-                        : selectedInvoicePath 
-                          ? 'Documento Selezionato' 
-                          : 'Trascina o Seleziona un file'}
+                      {isDragging
+                        ? 'Rilascia i file qui'
+                        : selectedInvoicePaths.length
+                          ? selectedInvoicePaths.length === 1
+                            ? 'Documento Selezionato'
+                            : `${selectedInvoicePaths.length} Documenti Selezionati`
+                          : 'Trascina o Seleziona i file'}
                     </h4>
                     <p className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-widest leading-relaxed px-4 break-all">
-                      {isDragging 
-                        ? 'Rilascia il file XML per caricarlo.' 
-                        : selectedInvoicePath 
-                          ? selectedInvoicePath 
-                          : 'Trascina qui il file XML della fattura oppure fai click sotto per cercarlo.'}
+                      {isDragging
+                        ? 'Rilascia i file XML per caricarli.'
+                        : selectedInvoicePaths.length
+                          ? 'Le righe delle fatture vengono riconciliate insieme, in una sola importazione.'
+                          : 'Trascina qui i file XML delle fatture oppure fai click sotto per cercarli. Puoi selezionarne piuù di uno.'}
                     </p>
                   </div>
                   {!isDragging && (
@@ -852,13 +901,51 @@ const ImportListiniSettings = () => {
                   )}
                 </div>
 
-                {selectedInvoicePath && (
+                {selectedInvoicePaths.length > 0 && (
                   <div className="bg-slate-50/80 rounded-[2.5rem] p-6 border border-slate-100 space-y-4 animate-premium-in text-center">
                     <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
                       <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mx-auto">
                         <Eye size={14} className="text-indigo-600 animate-pulse" /> Riconciliazione Listino Pronta
                       </span>
                     </div>
+
+                    {/*
+                      Un file per riga, con il fornitore che il backend ha letto
+                      dalla fattura: e' il modo di accorgersi di aver preso il
+                      file sbagliato prima di importare, non dopo.
+                    */}
+                    {invoiceSources.length > 0 && (
+                      <ul className="space-y-2 text-left">
+                        {invoiceSources.map(sorgente => (
+                          <li
+                            key={sorgente.file}
+                            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border ${
+                              sorgente.error
+                                ? 'bg-rose-50/70 border-rose-200'
+                                : 'bg-white/70 border-slate-100'
+                            }`}
+                          >
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="text-[0.78rem] font-black text-slate-700 truncate">
+                                {sorgente.file}
+                              </div>
+                              <div className={`text-[0.68rem] font-bold uppercase tracking-widest ${
+                                sorgente.error ? 'text-rose-600' : 'text-slate-400'
+                              }`}>
+                                {sorgente.error ? 'Non leggibile' : sorgente.supplier}
+                              </div>
+                            </div>
+                            <span className={`shrink-0 px-3 py-1 rounded-full text-[0.68rem] font-black tabular-nums ${
+                              sorgente.error
+                                ? 'bg-rose-100 text-rose-600'
+                                : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                              {sorgente.error ? '—' : `${sorgente.count} righe`}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {loadingInvoicePreview ? (
                       <div className="flex flex-col items-center justify-center py-4 space-y-3">
                         <Loader2 size={24} className="animate-spin text-indigo-600" />
@@ -1279,10 +1366,22 @@ const ImportListiniSettings = () => {
                           <div className="text-sm font-black text-slate-800 leading-snug">
                             {m.invoiceRow.description}
                           </div>
-                          <div className="flex gap-3 text-xs font-bold text-slate-400">
+                          <div className="flex gap-3 text-xs font-bold text-slate-400 flex-wrap items-center">
                             <span>UM: {m.invoiceRow.unit || 'pz'}</span>
                             <span>•</span>
                             <span className="text-indigo-600 font-extrabold">Prezzo XML: € {m.invoiceRow.unit_price.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            {/*
+                              Con una fattura sola il nome del file e' rumore.
+                              Con piu' fatture insieme e' l'unico modo di
+                              distinguere due righe di descrizione identica, e
+                              di capire quale fornitore verra' scritto a
+                              listino.
+                            */}
+                            {invoiceSources.length > 1 && m.sourceFile && (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[0.65rem] font-black truncate max-w-[14rem]">
+                                {m.sourceFile}
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -1569,7 +1668,17 @@ const ImportListiniSettings = () => {
     onClose={() => setIsImportConfirmOpen(false)}
     onConfirm={executeImportInvoice}
     title="Conferma Aggiornamento Listino da XML"
-    message="Confermi l'importazione delle associazioni e la creazione dei nuovi articoli estratti dal file XML della fattura?"
+    message={(() => {
+      const letti = invoiceSources.filter(f => !f.error)
+      const fornitori = [...new Set(letti.map(f => f.supplier))]
+      const da = letti.length > 1
+        ? `${letti.length} fatture (${fornitori.join(', ')})`
+        : 'la fattura'
+      // I fornitori vanno detti: e' il dato con cui gli articoli nuovi
+      // finiranno a listino, e l'ultimo momento per accorgersi di un file
+      // sbagliato nel gruppo.
+      return `Confermi l'importazione di ${invoiceMappings.length} righe estratte da ${da}? Gli articoli nuovi verranno creati sotto il fornitore della propria fattura.`
+    })()}
     confirmLabel="Sì, procedi"
     cancelLabel="Annulla"
     type="warning"

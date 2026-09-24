@@ -2451,6 +2451,22 @@ pub struct XmlMappingRow {
     pub selected_catalog_item_id: Option<i64>,
     pub custom_code: String,
     pub markup: Option<f64>,
+    /// Fornitore della fattura da cui viene questa riga.
+    ///
+    /// PERCHE' SULLA RIGA E NON SUL LOTTO
+    /// ----------------------------------
+    /// `import_invoice_mappings` riceve anche un `supplier` per l'intera
+    /// chiamata, e finche' si importava una fattura alla volta bastava. Da
+    /// quando se ne possono caricare piu' di una insieme non basta piu': due
+    /// fatture di fornitori diversi finirebbero a listino sotto lo stesso
+    /// nome, e in un listino il fornitore e' il dato con cui si ritrova un
+    /// articolo. Tenendolo qui l'informazione resta attaccata alla riga da cui
+    /// proviene, e l'importazione resta un'unica transazione.
+    ///
+    /// `Option` con `serde(default)`: un chiamante che non lo manda ricade sul
+    /// parametro della chiamata, come prima.
+    #[serde(default)]
+    pub supplier: Option<String>,
 }
 
 /// Esito del parsing di una fattura elettronica.
@@ -2614,6 +2630,10 @@ pub fn parse_invoice_xml(file_path: String) -> Result<XmlInvoiceParseResult, Str
             selected_catalog_item_id,
             custom_code,
             markup,
+            // Ogni riga si porta dietro il fornitore della propria fattura,
+            // cosi' il frontend puo' unire righe di fatture diverse senza
+            // doverlo ricucire a mano.
+            supplier: Some(supplier.clone()),
         });
     }
 
@@ -2631,7 +2651,15 @@ pub fn import_invoice_mappings(mappings: Vec<XmlMappingRow>, supplier: String) -
 }
 
 fn import_invoice_mappings_impl(mappings: Vec<XmlMappingRow>, supplier: String) -> Result<(), String> {
-    log::info!("CMD [import_invoice_mappings] count: {}, supplier: {}", mappings.len(), supplier);
+    let fornitori_distinti: std::collections::BTreeSet<&str> = mappings
+        .iter()
+        .filter_map(|r| r.supplier.as_deref())
+        .collect();
+    log::info!(
+        "CMD [import_invoice_mappings] righe: {}, fornitori distinti: {}",
+        mappings.len(),
+        fornitori_distinti.len().max(1)
+    );
     let mut conn = get_connection().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     
@@ -2660,9 +2688,13 @@ fn import_invoice_mappings_impl(mappings: Vec<XmlMappingRow>, supplier: String) 
                 let unit = row.invoice_item.unit;
                 let price = row.invoice_item.unit_price;
                 
+                // Il fornitore della riga vince su quello della chiamata: con
+                // piu' fatture insieme sono diversi riga per riga.
+                let fornitore = row.supplier.as_deref().unwrap_or(supplier.as_str());
+
                 tx.execute(
                     "INSERT INTO catalog_materials (code, description, unit, unit_price, supplier, markup) VALUES (?, ?, ?, ?, ?, ?)",
-                    rusqlite::params![code, desc, unit, price, supplier, markup_val],
+                    rusqlite::params![code, desc, unit, price, fornitore, markup_val],
                 ).map_err(|e| e.to_string())?;
             }
             _ => {} // ignore

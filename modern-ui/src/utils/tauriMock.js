@@ -499,6 +499,16 @@ export async function invoke(commandName, args = {}) {
       console.warn('Frontend log intercepted:', args.message, args.stack);
       return true;
 
+    // La lettura di una fattura richiede il filesystem, che l'anteprima web
+    // non ha. Prima questi due comandi finivano nel `default`, che restituisce
+    // `null`: il chiamante leggeva `result.supplier` su null e vedeva un
+    // TypeError invece del motivo vero. Il mock deve imitare il backend, e
+    // dove il backend ha bisogno del sistema operativo deve dirlo.
+    case 'parse_invoice_xml':
+      throw new Error("Lettura delle fatture XML non disponibile nell'anteprima web");
+    case 'import_invoice_mappings':
+      throw new Error("Importazione da fattura non disponibile nell'anteprima web");
+
     case 'save_pdf_file':
       console.log('PDF saving mock (web environment):', args.destPath, `bytes length: ${args.content?.length}`);
       // Nelle preview web, facciamo scaricare direttamente il PDF al browser!
