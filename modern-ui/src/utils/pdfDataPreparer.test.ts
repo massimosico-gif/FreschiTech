@@ -145,3 +145,95 @@ describe('prepareInternalPdfData', () => {
     expect(vuoto.summary.utileEffettivoPercent).toBe(0);
   });
 });
+
+/*
+  Esportazione ristretta a un solo centro di costo.
+
+  E' il caso prodotto dal menu "Esporta PDF" dentro un centro di costo: al
+  preparatore si passa un elenco di un solo centro e le sole voci che gli
+  appartengono. Qui si verifica che il documento che ne esce sia coerente e
+  non si porti dietro niente del resto della commessa.
+*/
+describe('un documento ristretto a un solo centro di costo', () => {
+  const secondoCc: CostCenter = {
+    id: 20,
+    project_id: 1,
+    brand: 'ABB',
+    model: 'Quadro B',
+    category: 'Quadri',
+    base_cost: 500,
+    markup: 0.1,
+    shipping: 0,
+    install_fee: 0,
+    accepted_budget: 600,
+  };
+
+  const materialeAltroCc: Material = {
+    id: 3,
+    project_id: 1,
+    cost_center_id: 20,
+    description: 'Cavo del secondo centro',
+    quantity: 10,
+    unit: 'm',
+    unit_price: 2,
+    markup: 0.1,
+  };
+
+  const tuttiICentri = [...costCenters, secondoCc];
+  const tuttiIMateriali = [...materials, materialeAltroCc];
+
+  // Quello che `useFilteredMaterials` consegna con il centro 10 selezionato:
+  // solo le sue voci. Le righe senza centro di costo restano fuori, perche'
+  // non appartengono a quel centro.
+  const materialiDelCentro = tuttiIMateriali.filter(m => m.cost_center_id === 10);
+
+  const completo = prepareClientPdfData(tuttiICentri, tuttiIMateriali, labor, expenses);
+  const ristretto = prepareClientPdfData([costCenters[0]], materialiDelCentro, labor, expenses);
+
+  const descrizioni = (dati: { groups: Array<{ rows: Array<readonly string[]> }> }) =>
+    dati.groups.flatMap(g => g.rows.map(r => r[1])).join(' | ');
+
+  it('contiene un gruppo solo, invece dei tre del documento completo', () => {
+    // Completo: due centri di costo piu' il gruppo delle voci generali.
+    expect(completo.groups).toHaveLength(3);
+    expect(ristretto.groups).toHaveLength(1);
+  });
+
+  it('non riporta le voci degli altri centri di costo', () => {
+    expect(descrizioni(ristretto)).toContain('Cavo FG16');
+    expect(descrizioni(ristretto)).not.toContain('Cavo del secondo centro');
+    expect(descrizioni(completo)).toContain('Cavo del secondo centro');
+  });
+
+  it('esclude le voci non assegnate a nessun centro di costo', () => {
+    // Conseguenza voluta del filtro: "Materiale di consumo" non ha centro di
+    // costo, quindi non appartiene a questo. Nel documento completo c'e'.
+    expect(descrizioni(completo)).toContain('Materiale di consumo');
+    expect(descrizioni(ristretto)).not.toContain('Materiale di consumo');
+  });
+
+  it('il totale e piu basso di quello della commessa intera', () => {
+    expect(ristretto.grandTotalSale).toBeGreaterThan(0);
+    expect(ristretto.grandTotalSale).toBeLessThan(completo.grandTotalSale);
+  });
+
+  it('restringere non sfalsa i conti del centro di costo', () => {
+    // Lo stesso centro di costo vale lo stesso, da solo o in mezzo agli
+    // altri: e' la prova che passare un sottoinsieme non altera i calcoli.
+    expect(ristretto.grandTotalSale).toBeCloseTo(completo.groups[0].subtotal, 2);
+    expect(ristretto.groups[0].subtotal).toBeCloseTo(completo.groups[0].subtotal, 2);
+  });
+
+  it('anche il report interno resta coerente', () => {
+    const internoRistretto = prepareInternalPdfData(project, [costCenters[0]], materialiDelCentro, labor, expenses);
+    const internoCompleto = prepareInternalPdfData(project, tuttiICentri, tuttiIMateriali, labor, expenses);
+
+    expect(internoRistretto.summary.grandTotalCost).toBeLessThan(internoCompleto.summary.grandTotalCost);
+    expect(internoRistretto.summary.grandTotalSale).toBeLessThan(internoCompleto.summary.grandTotalSale);
+    // Il margine resta la differenza fra vendita e costo di CIO' CHE C'E' nel
+    // documento, non un residuo di quello completo.
+    expect(internoRistretto.summary.grandMargin).toBeCloseTo(
+      internoRistretto.summary.grandTotalSale - internoRistretto.summary.grandTotalCost, 2
+    );
+  });
+});

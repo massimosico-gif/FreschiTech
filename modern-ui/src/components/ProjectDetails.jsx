@@ -14,9 +14,10 @@ import {
 } from 'lucide-react'
 
 // UI Components
-import { ConfirmModal } from '@tecno/ui/feedback'
+import { ConfirmModal, useToast } from '@tecno/ui/feedback'
 
 // Project Sub-components
+import { nomeFilePdf } from '../utils/nomiFile'
 import ProjectHeader from './project/ProjectHeader'
 import TotalsBar from './project/TotalsBar'
 import DashboardTab from './project/DashboardTab'
@@ -92,6 +93,7 @@ const ProjectDetails = ({ projectId, initialCostCenterId = null, onBack }) => {
   const filteredLabor = useFilteredLabor()
   const filteredExpenses = useFilteredExpenses()
   const activeCC = useActiveCC()
+  const toast = useToast()
 
   // ─── Effetti ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -204,18 +206,40 @@ const ProjectDetails = ({ projectId, initialCostCenterId = null, onBack }) => {
    * @param generatorName  Esportazione da usare in `utils/pdfGenerator`.
    * @param suffix         Suffisso del nome file proposto.
    */
-  const exportPdf = async (generatorName, suffix) => {
+  /**
+   * Genera un PDF e lo salva dove indica l'utente.
+   *
+   * @param generatorName        Esportazione da usare in `utils/pdfGenerator`.
+   * @param suffix               Suffisso del nome file proposto.
+   * @param soloCentroDiCosto    Limita il documento al centro di costo aperto.
+   *
+   * PERCHE' ESISTE LA SCELTA
+   * -----------------------
+   * Dentro un centro di costo le schede mostrano le sole voci di quel centro,
+   * ma l'esportazione passava comunque gli elenchi interi: si guardava un
+   * centro di costo, l'intestazione ne portava il nome, e il PDF che ne
+   * usciva era tutta la commessa. Non c'era modo di accorgersene prima di
+   * aprire il file.
+   */
+  const exportPdf = async (generatorName, suffix, soloCentroDiCosto = false) => {
     if (!project) return
     try {
       const generators = await import('../utils/pdfGenerator')
-      const doc = generators[generatorName](project, client, costCenters, materials, labor, expenses)
+
+      // `groupByCostCenter` raggruppa esattamente gli elenchi che riceve,
+      // quindi restringere il documento e' una questione di cosa gli si
+      // passa: il generatore non va toccato.
+      const ristretto = soloCentroDiCosto && !!activeCC
+      const doc = ristretto
+        ? generators[generatorName](project, client, [activeCC], filteredMaterials, filteredLabor, filteredExpenses)
+        : generators[generatorName](project, client, costCenters, materials, labor, expenses)
 
       const filePath = await saveFileDialog({
         filters: [{
           name: 'Documento PDF',
           extensions: ['pdf']
         }],
-        defaultPath: `Commessa_${project.name.replace(/\s+/g, '_')}_${suffix}.pdf`
+        defaultPath: nomeFilePdf(project, ristretto ? activeCC : null, suffix)
       })
       if (!filePath) return
 
@@ -223,12 +247,17 @@ const ProjectDetails = ({ projectId, initialCostCenterId = null, onBack }) => {
       await invoke('save_pdf_file', { destPath: filePath, content: Array.from(pdfBytes) })
     } catch (err) {
       console.error(err)
-      alert(`Errore durante il salvataggio del PDF: ${err}`)
+      toast.error(`Errore durante il salvataggio del PDF: ${err}`)
     }
   }
 
-  const handleExportClientPdf = () => exportPdf('generateClientPdf', 'Cliente')
-  const handleExportInternalPdf = () => exportPdf('generateInternalPdf', 'ReportInterno')
+  // Il parametro arriva dall'intestazione, che lo passa sempre esplicito: un
+  // `onClick={handleExport}` consegnerebbe l'evento del click come primo
+  // argomento, e un evento e' truthy.
+  const handleExportClientPdf = (soloCentroDiCosto = false) =>
+    exportPdf('generateClientPdf', 'Cliente', soloCentroDiCosto)
+  const handleExportInternalPdf = (soloCentroDiCosto = false) =>
+    exportPdf('generateInternalPdf', 'ReportInterno', soloCentroDiCosto)
 
   // ─── Render ───────────────────────────────────────────────────────
   return (

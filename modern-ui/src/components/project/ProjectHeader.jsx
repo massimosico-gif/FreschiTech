@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, User, MapPin, Clock, Plus, FileText, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, User, MapPin, Clock, Plus, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react'
 
 const ProjectHeader = ({ 
   project, 
@@ -14,6 +14,39 @@ const ProjectHeader = ({
   isCostCenter,
   parentProjectName
 }) => {
+  /*
+    Dentro un centro di costo l'esportazione ha due significati possibili - il
+    solo centro aperto, oppure l'intera commessa - e vanno chiesti. Fuori, la
+    domanda non esiste: i due pulsanti restano come erano.
+  */
+  const [menuAperto, setMenuAperto] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuAperto) return undefined
+
+    const alClick = (evento) => {
+      if (menuRef.current && !menuRef.current.contains(evento.target)) {
+        setMenuAperto(false)
+      }
+    }
+    const alTasto = (evento) => {
+      if (evento.key === 'Escape') setMenuAperto(false)
+    }
+
+    document.addEventListener('mousedown', alClick)
+    document.addEventListener('keydown', alTasto)
+    return () => {
+      document.removeEventListener('mousedown', alClick)
+      document.removeEventListener('keydown', alTasto)
+    }
+  }, [menuAperto])
+
+  const esporta = (azione, soloCentroDiCosto) => {
+    setMenuAperto(false)
+    azione(soloCentroDiCosto)
+  }
+
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -68,10 +101,10 @@ const ProjectHeader = ({
         {/* Tab Navigation & Actions */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
           {/* PDF Buttons */}
-          {onExportClientPdf && onExportInternalPdf && (
+          {onExportClientPdf && onExportInternalPdf && !isCostCenter && (
             <div className="flex gap-2">
               <button
-                onClick={onExportClientPdf}
+                onClick={() => onExportClientPdf(false)}
                 className="flex items-center gap-2 px-4 py-3 bg-white/80 hover:bg-white text-indigo-600 border border-slate-100 hover:border-slate-200 rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer"
                 title="Esporta PDF Cliente (Prezzi finali con rincaro, senza dettagli interni)"
               >
@@ -79,13 +112,91 @@ const ProjectHeader = ({
                 PDF Cliente
               </button>
               <button
-                onClick={onExportInternalPdf}
+                onClick={() => onExportInternalPdf(false)}
                 className="flex items-center gap-2 px-4 py-3 bg-[#1e293b] hover:bg-slate-800 text-white rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer"
                 title="Esporta PDF Report Interno (Costi, rincari e margine)"
               >
                 <FileSpreadsheet size={14} />
                 PDF Interno
               </button>
+            </div>
+          )}
+
+          {/*
+            Dentro un centro di costo: un solo pulsante che apre quattro voci
+            esplicite. Due pulsanti con un comportamento implicito erano
+            proprio il problema - producevano l'intera commessa mentre
+            l'intestazione mostrava il centro di costo.
+          */}
+          {onExportClientPdf && onExportInternalPdf && isCostCenter && (
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuAperto(aperto => !aperto)}
+                aria-haspopup="menu"
+                aria-expanded={menuAperto}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-[#1e293b] hover:bg-slate-800 text-white rounded-xl text-[0.75rem] font-black uppercase tracking-widest shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer"
+                title="Esporta in PDF questo centro di costo oppure l'intera commessa"
+              >
+                <FileText size={14} />
+                Esporta PDF
+                <ChevronDown size={14} className={`transition-transform ${menuAperto ? 'rotate-180' : ''}`} />
+              </button>
+
+              {menuAperto && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-2 w-72 bg-white rounded-2xl border border-slate-100 shadow-2xl overflow-hidden animate-premium-in"
+                >
+                  <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-100">
+                    <span className="text-[0.62rem] font-black uppercase tracking-[0.2em] text-slate-400">
+                      Solo questo centro di costo
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => esporta(onExportClientPdf, true)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FileText size={14} className="shrink-0 text-indigo-600" />
+                    <span className="text-[0.75rem] font-black text-slate-700 uppercase tracking-wider">PDF Cliente</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => esporta(onExportInternalPdf, true)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet size={14} className="shrink-0 text-slate-700" />
+                    <span className="text-[0.75rem] font-black text-slate-700 uppercase tracking-wider">PDF Interno</span>
+                  </button>
+
+                  <div className="px-4 py-3 bg-slate-50/80 border-y border-slate-100">
+                    <span className="text-[0.62rem] font-black uppercase tracking-[0.2em] text-slate-400">
+                      Tutta la commessa
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => esporta(onExportClientPdf, false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FileText size={14} className="shrink-0 text-indigo-600" />
+                    <span className="text-[0.75rem] font-black text-slate-700 uppercase tracking-wider">PDF Cliente</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => esporta(onExportInternalPdf, false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet size={14} className="shrink-0 text-slate-700" />
+                    <span className="text-[0.75rem] font-black text-slate-700 uppercase tracking-wider">PDF Interno</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
   
